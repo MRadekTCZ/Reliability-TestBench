@@ -9,33 +9,33 @@ static uint32_t calcTimerPeriod(uint32_t freq_hz, uint32_t cpuclk_hz)
     return (cpuclk_hz / freq_hz) - 1UL;
 }
 
-void TI_TIMER_InitHz(uint32_t freq_hz, uint32_t cpuclk_hz)
+void TI_TIMER_InitHz(uint32_t TIMER_BASE, uint32_t freq_hz, uint32_t cpuclk_hz)
 {
     const uint32_t period = calcTimerPeriod(freq_hz, cpuclk_hz);
 
     // Stop timer
-    CPUTimer_stopTimer(CPUTIMER0_BASE);
+    CPUTimer_stopTimer(TIMER_BASE);
 
     // Set period and prescaler (0 => divide by 1)
-    CPUTimer_setPeriod(CPUTIMER0_BASE, period);
-    CPUTimer_setPreScaler(CPUTIMER0_BASE, 0U);
+    CPUTimer_setPeriod(TIMER_BASE, period);
+    CPUTimer_setPreScaler(TIMER_BASE, 0U);
 
     // Reload counter
-    CPUTimer_reloadTimerCounter(CPUTIMER0_BASE);
+    CPUTimer_reloadTimerCounter(TIMER_BASE);
 
     // Enable interrupt generation from the timer
-    CPUTimer_enableInterrupt(CPUTIMER0_BASE);
+    CPUTimer_enableInterrupt(TIMER_BASE);
 
     // Start timer
-    CPUTimer_startTimer(CPUTIMER0_BASE);
+    CPUTimer_startTimer(TIMER_BASE);
 }
 
-void TI_TIMER_SetFreqHz(uint32_t freq_hz, uint32_t cpuclk_hz)
+void TI_TIMER_SetFreqHz(uint32_t TIMER_BASE, uint32_t freq_hz, uint32_t cpuclk_hz)
 {
     const uint32_t period = calcTimerPeriod(freq_hz, cpuclk_hz);
 
-    CPUTimer_stopTimer(CPUTIMER0_BASE);                 // stop
-    CPUTimer_setPeriod(CPUTIMER0_BASE, period);         // update period
-    CPUTimer_reloadTimerCounter(CPUTIMER0_BASE);        // reload
-    CPUTimer_startTimer(CPUTIMER0_BASE);                // start
+    CPUTimer_stopTimer(TIMER_BASE);                 // stop
+    CPUTimer_setPeriod(TIMER_BASE, period);         // update period
+    CPUTimer_reloadTimerCounter(TIMER_BASE);        // reload
+    CPUTimer_startTimer(TIMER_BASE);                // start
 }

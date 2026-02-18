@@ -4,6 +4,7 @@
  *  Created on: Nov 25, 2024
  *      Author: brzycki
  */
+
 #include "SVPWM.h"
 SVPWM svPWM(float Ud, float Uq, float theta, float U_dc)
 {
