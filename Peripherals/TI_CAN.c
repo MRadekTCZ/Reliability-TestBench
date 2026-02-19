@@ -2,7 +2,7 @@
 #include "device.h"
 #include "TI_CAN.h"
 #include <stdint.h>
-
+#include <math.h>
 void CANB_MSG_INIT(uint8_t start_tx, uint8_t end_tx, uint8_t start_rx, uint8_t end_rx){
     
     uint8_t msg_indx = 0;
@@ -67,44 +67,73 @@ void u64_to_4x_int16(uint64_t value, int16_t out[4])
     }
 }
 
-#include <stdint.h>
-#include <math.h>
 
-uint64_t float4_to_u64_k(float a, float b, float c, float d, float k)
+uint64_t float3k_to_u64(float a, float b, float c, float k)
 {
     uint64_t value = 0;
     float v;
-    int16_t s;
+    int16_t s16;
+    uint16_t u16k;
 
-    // ---- a ----
+    // ---- a scaled by k -> int16 ----
     v = roundf(a * k);
-    if (v > 32767.0f)      v = 32767.0f;
+    if (v > 32767.0f)       v = 32767.0f;
     else if (v < -32768.0f) v = -32768.0f;
-    s = (int16_t)v;
-    value |= ((uint64_t)(uint16_t)s) << 0;
+    s16 = (int16_t)v;
+    value |= ((uint64_t)(uint16_t)s16) << 0;
 
-    // ---- b ----
+    // ---- b scaled by k -> int16 ----
     v = roundf(b * k);
-    if (v > 32767.0f)      v = 32767.0f;
+    if (v > 32767.0f)       v = 32767.0f;
     else if (v < -32768.0f) v = -32768.0f;
-    s = (int16_t)v;
-    value |= ((uint64_t)(uint16_t)s) << 16;
+    s16 = (int16_t)v;
+    value |= ((uint64_t)(uint16_t)s16) << 16;
 
-    // ---- c ----
+    // ---- c scaled by k -> int16 ----
     v = roundf(c * k);
-    if (v > 32767.0f)      v = 32767.0f;
+    if (v > 32767.0f)       v = 32767.0f;
     else if (v < -32768.0f) v = -32768.0f;
-    s = (int16_t)v;
-    value |= ((uint64_t)(uint16_t)s) << 32;
+    s16 = (int16_t)v;
+    value |= ((uint64_t)(uint16_t)s16) << 32;
 
-    // ---- d ----
-    v = roundf(d * k);
-    if (v > 32767.0f)      v = 32767.0f;
-    else if (v < -32768.0f) v = -32768.0f;
-    s = (int16_t)v;
-    value |= ((uint64_t)(uint16_t)s) << 48;
+    // ---- k itself (NOT scaled) -> uint16 ----
+    v = roundf(k);
+    if (v > 65535.0f)       v = 65535.0f;
+    else if (v < 0.0f)      v = 0.0f;        // clamp negatives to 0 for uint16
+    u16k = (uint16_t)v;
+    value |= ((uint64_t)u16k) << 48;
 
     return value;
+}
+
+#include <stdint.h>
+
+void u64_to_float3k(uint64_t packed, float *a, float *b, float *c)
+{
+    int16_t sa, sb, sc;
+    uint16_t uk;
+    float k;
+
+    // Unpack
+    sa = (int16_t)((packed >> 0)  & 0xFFFFu);
+    sb = (int16_t)((packed >> 16) & 0xFFFFu);
+    sc = (int16_t)((packed >> 32) & 0xFFFFu);
+    uk = (uint16_t)((packed >> 48) & 0xFFFFu);
+
+    // Avoid divide-by-zero
+    if (uk == 0u) {
+        if (a) *a = 0.0f;
+        if (b) *b = 0.0f;
+        if (c) *c = 0.0f;
+        return;
+    }
+
+    k = (float)uk;
+
+    // Reconstruct original floats
+    if (a) *a = (float)sa / k;
+    if (b) *b = (float)sb / k;
+    if (c) *c = (float)sc / k;
 }
 
 
@@ -130,4 +159,9 @@ void u64_to_4x_u32(uint64_t value,
     *w1 = (uint32_t)((value >> 16) & 0xFFFFULL);
     *w2 = (uint32_t)((value >> 32) & 0xFFFFULL);
     *w3 = (uint32_t)((value >> 48) & 0xFFFFULL);
+}
+
+uint16_t getStatus(uint64_t config, uint16_t bitIndex)
+{
+    return (uint16_t)((config >> bitIndex) & 1ULL);
 }

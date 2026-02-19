@@ -51,6 +51,7 @@ void CurrentObserver(threephase *Voltage,threephase *current_est, float Ts, floa
     ib_prev = ib_est;
     current_est->ab.alfa = ia_est;
     current_est->ab.beta = ib_est;
+    current_est->theta = atan2f(ib_est,ia_est);
     AlfaBeta_to_ABC(current_est, kpc);
     
 }
