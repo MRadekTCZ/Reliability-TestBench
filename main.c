@@ -3,8 +3,12 @@
 #include "Peripherals/TI_PWM.h"
 #include "Peripherals/TI_TIMER.h"
 #include "Peripherals/TI_CAN.h"
+#include "Peripherals/TI_SPI.h"
 #include "SourceCode/SVPWM.h"
 #include "SourceCode/ATC.h"
+#include "UCC5870/ucc5870.h"
+#include "UCC5870/hvp045a_io.h"
+#include "UCC5870/ucc5870_regs.h"
 #include <stdint.h>
 
 //Model parameter defines
@@ -55,6 +59,7 @@ uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
 uint64_t config = 0x5A5055AA;
+uint8_t CAN_on = 0;
 
 // CPU usage assesment
 #define MAX_IDLE_2kHz 16544
@@ -62,6 +67,12 @@ uint64_t config = 0x5A5055AA;
 uint32_t idle_cnt;
 uint32_t free_computing_time;
 float uCPU; //0 - 100%
+
+
+//Gate driver UCC5870
+uint16_t UCC5870_read_write = 1;
+uint16_t Read_GD1_0x14 = 0;
+
 void main(void)
 {
     // Device init (clock, PLL, watchdog config etc.)
@@ -77,6 +88,13 @@ void main(void)
     GPIO_setPadConfig(RED_LED, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(RED_LED, GPIO_DIR_MODE_OUT);
     GPIO_writePin(RED_LED, 0);
+
+    //SPI and Gate Driver UCC5870 init
+    configureSPI_GPIO();
+    configureSPI(GD_SPI_BASE);
+    Init_UCC5870_Regs();
+    Init_UCC5870();
+    GD_Init_LED_blink(7);
 
     // CANB pins (your board define must match the board)
     GPIO_setPinConfig(DEVICE_GPIO_CFG_CANRXB);
@@ -102,6 +120,8 @@ void main(void)
     // TX message objects (enable TX interrupt if you want to track completion later)
     CANB_MSG_INIT(CAN_TX_OFFSET,CAN_TX_OFFSET+CAN_MSG_TX_AMOUNT-1,CAN_RX_OFFSET,CAN_RX_OFFSET+CAN_MSG_RX_AMOUNT-1);
     CAN_startModule(CANB_BASE);
+
+
     // Enable peripheral interrupt sources (some are already enabled inside your TI_PWM/TI_TIMER init)
     // For timer: TI_TIMER_InitHz enables timer interrupt generation, but you still must enable the CPU interrupt line:
     Interrupt_enable(INT_TIMER0);
@@ -133,15 +153,15 @@ __interrupt void epwm1_isr(void)
 {
     
     //Safety turning off
-    if(getStatus(config, STATUS_OFF)|(!getStatus(config, STATUS_ON)))
+    if((getStatus(config, STATUS_OFF)|(!getStatus(config, STATUS_ON)))&&CAN_on)
     {
-        U_ref.omega = 0.0;
-        U_ref.dq.d = 0.0;
-        U_ref.dq.q = 0.0;
+        U_ref.omega = 0.0f;
+        U_ref.dq.d = 0.0f;
+        U_ref.dq.q = 0.0f;
     }
     // Update PWM
     U_ref.theta = U_ref.theta + U_ref.omega*Ts;
-    if(U_ref.theta >= 2*PI ) U_ref.theta = U_ref.theta - 2*PI;
+    if(U_ref.theta >= 2.0f*PI ) U_ref.theta = U_ref.theta - 2.0f*PI;
     svpwm = svPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas);
     DQ_to_AlfaBeta(&U_ref);
     AlfaBeta_to_ABC(&U_ref, kpc);
@@ -224,11 +244,14 @@ __interrupt void cpu_timer0_isr(void)
 
     switch(can_rx_msg_cnt)
     {
-    case 0:  
-    config = can_data_rx[0]; break;
-    case 1:
-    u64_to_float3k(can_data_rx[1], &U_ref.dq.d, &U_ref.dq.q, &U_ref.omega); break;
-    default: break;
+        case 0:  
+        config = can_data_rx[0]; break;
+        case 1:
+        if(getStatus(config, CAN_CONTROL))
+        {
+        u64_to_float3k(can_data_rx[1], &U_ref.dq.d, &U_ref.dq.q, &U_ref.omega); break;
+        }
+        default: break;
     }
     
     can_tx_msg_cnt++;
@@ -260,5 +283,8 @@ __interrupt void cpu_timer1_isr(void)
         GPIO_writePin(BLUE_LED, 1);
     }
     else if(timerALGO_cnt == 150) timerALGO_cnt = 0;
+   
+    Read_GD1_0x14 = readRegUCC5870(0x01, 0x14);
+
     
 }
