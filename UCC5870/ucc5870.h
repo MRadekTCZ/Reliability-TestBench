@@ -67,6 +67,17 @@ uint16_t   readRegUCC5870 (uint16_t CA, uint16_t RA);
 void       writeRegUCC5870(uint16_t CA, uint16_t RA, uint16_t  data);
 uint16_t   writeVerifyRegUCC5870 (uint16_t CA, uint16_t RA, uint16_t  data);
 uint16_t   writeVerify_UCC5870(uint16_t i);
+// My functions
+float UCC5870_ADC_READ(uint16_t adc_data);
+uint16_t UCC5870_ADC_READ_wTIme(uint16_t adc_data, uint16_t *timestamp);
+float UCC5870_TEMPERATURE_READ(uint16_t adc_data);
+
+typedef struct{
+    float AI[7];
+    float temperature;
+    float Uth;
+    uint16_t DATA_SPI;
+}GD_UCC;
 
 //=============================================================================
 #endif /* _UCC5870_H_ */

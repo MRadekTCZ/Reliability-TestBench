@@ -1224,22 +1224,22 @@ typedef union  {
 //
 struct  UCC5870_ADCCFG_REG_BITS
 {                                     // bit     description
-    uint16_t  rsvd0            : 1;   //  0
-    uint16_t  ADC_ON_CH_SEL_7  : 1;   //  1
-    uint16_t  ADC_ON_CH_SEL_6  : 1;   //  2
-    uint16_t  ADC_ON_CH_SEL_5  : 1;   //  3
-    uint16_t  ADC_ON_CH_SEL_4  : 1;   //  4
-    uint16_t  ADC_ON_CH_SEL_3  : 1;   //  5
-    uint16_t  ADC_ON_CH_SEL_2  : 1;   //  6
-    uint16_t  ADC_ON_CH_SEL_1  : 1;   //  7
-    uint16_t  rsvd7            : 1;   //  8
-    uint16_t  ADC_OFF_CH_SEL_7 : 1;   //  9
-    uint16_t  ADC_OFF_CH_SEL_6 : 1;   // 10
-    uint16_t  ADC_OFF_CH_SEL_5 : 1;   // 11
-    uint16_t  ADC_OFF_CH_SEL_4 : 1;   // 12
-    uint16_t  ADC_OFF_CH_SEL_3 : 1;   // 13
-    uint16_t  ADC_OFF_CH_SEL_2 : 1;   // 14
-    uint16_t  ADC_OFF_CH_SEL_1 : 1;   // 15
+    uint16_t ADC_OFF_CH_SEL_1 : 1; // bit0
+    uint16_t ADC_OFF_CH_SEL_2 : 1; // bit1
+    uint16_t ADC_OFF_CH_SEL_3 : 1; // bit2
+    uint16_t ADC_OFF_CH_SEL_4 : 1; // bit3
+    uint16_t ADC_OFF_CH_SEL_5 : 1; // bit4
+    uint16_t ADC_OFF_CH_SEL_6 : 1; // bit5
+    uint16_t ADC_OFF_CH_SEL_7 : 1; // bit6
+    uint16_t rsvd7            : 1; // bit7
+    uint16_t ADC_ON_CH_SEL_1  : 1; // bit8
+    uint16_t ADC_ON_CH_SEL_2  : 1; // bit9
+    uint16_t ADC_ON_CH_SEL_3  : 1; // bit10
+    uint16_t ADC_ON_CH_SEL_4  : 1; // bit11
+    uint16_t ADC_ON_CH_SEL_5  : 1; // bit12
+    uint16_t ADC_ON_CH_SEL_6  : 1; // bit13
+    uint16_t ADC_ON_CH_SEL_7  : 1; // bit14
+    uint16_t rsvd15           : 1; // bit15
 };
 
 typedef union  {

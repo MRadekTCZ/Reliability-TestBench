@@ -382,7 +382,7 @@ void Init_UCC5870_Regs(void)
     ucc5870[UH].cfg7.bit.ADC_FAULT_P        = dont_report_adcfault_on_nFLT1;
     ucc5870[UH].cfg7.bit.ADC_SAMP_DLY       = ADC_SAMP_DELAY_1120ns;
     ucc5870[UH].cfg7.bit.ADC_SAMP_MODE      = ADC_SAMP_CENTER_ALIGN;
-    ucc5870[UH].cfg7.bit.ADC_EN             = ADC_SAMP_DISABLE;
+    ucc5870[UH].cfg7.bit.ADC_EN             = ADC_SAMP_ENABLE;
     ucc5870[UH].cfg7.bit.OVLO3TH            = VEE2_OVLO_VTH_M10V;
     ucc5870[UH].cfg7.bit.UVLO3TH            = VEE2_UVLO_VTH_M3V;
     ucc5870[UH].cfg7.bit.OVLO2TH            = VCC2_OVLO_VTH_P23V;
@@ -452,13 +452,13 @@ void Init_UCC5870_Regs(void)
     ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_3  = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_2  = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_1  = DONT_SAMPLE_CH;
-    ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_7 = DONT_SAMPLE_CH;
+    ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_7 = SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_6 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_5 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_4 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_3 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_2 = DONT_SAMPLE_CH;
-    ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_1 = DONT_SAMPLE_CH;
+    ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_1 = SAMPLE_CH;
 
     //
     // DOUTCFG register settings
@@ -753,7 +753,15 @@ UCC5870_Status_e Init_UCC5870()
     else
     {
         status = inverterDiagnostics();
-        writeRegUCC5870(0x01, 0x14, 5);
+        // Config 2 state - writing data to registers
+        int addr = 0;
+        for (addr = 1; addr <= 6; addr++){
+            writeRegUCC5870(addr, SPITEST, 1<<addr);
+        }
+
+
+        // ADC CONFIG
+        //writeRegUCC5870(0x01, ADCCFG, 0x4100);
         if (status == ALL_GOOD)
         {
             //
@@ -973,3 +981,28 @@ uint16_t writeVerify_UCC5870(uint16_t i)
  * End of Code *
  * ***************************************************************************
  */
+
+float UCC5870_ADC_READ(uint16_t adc_data){
+    float voltage = 0;
+    uint16_t adc_extract = 0;
+    //float VREF = 3.6;
+    //float bit_mul = 0.0009775171f;
+    adc_extract = adc_data & 0x03FF;
+    voltage = adc_extract * 3.6f * 0.0009775171f;
+    return voltage;
+}
+
+uint16_t UCC5870_ADC_READ_wTIme(uint16_t adc_data, uint16_t *timestamp){
+    *timestamp = (adc_data>>10) & 0x003F;
+    return adc_data & 0x03FF;
+}
+
+float UCC5870_TEMPERATURE_READ(uint16_t adc_data){
+    float temperature = 0;
+    uint16_t adc_extract = 0;
+    //float VREF = 4.0f;
+    //float bit_mul = 0.0009775171f;
+    adc_extract = adc_data & 0x03FF;
+    temperature = (adc_extract * 0.7015f) - 198.36f;
+    return temperature;
+}

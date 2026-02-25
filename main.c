@@ -23,7 +23,9 @@ const float inv_kpc = 1/(1.0f/one_by_sqrt2/sqrt3);
 #define BLUE_LED    31
 #define GREEN_LED    25
 #define RED_LED    34
+
 //Clocks
+
 // Interrupt declarations
 __interrupt void epwm1_isr(void);
 __interrupt void cpu_timer0_isr(void);
@@ -34,13 +36,16 @@ uint32_t timerCOM = 2000; // Hz of timer 0 - adjustable in debugger
 uint32_t timerALGO = 100;
 uint32_t timerCOM_cnt = 0;
 uint32_t timerALGO_cnt = 0;
+
 //ATC - PWM timer
 float gPWMratio = 1.0f;
 float Ts = 0.0001f;
+
 //ATC algo
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
 float Rdson_base = 80.0f; //mOhm
+
 // Electric variables
 threephase Current_est, Current_meas, U_ref, U_read;
 SVPWM svpwm;
@@ -70,8 +75,8 @@ float uCPU; //0 - 100%
 
 
 //Gate driver UCC5870
-uint16_t UCC5870_read_write = 1;
-uint16_t Read_GD1_0x14 = 0;
+GD_UCC gd[6];
+uint16_t GD1_AI1, GD2_AI1;
 
 void main(void)
 {
@@ -188,17 +193,27 @@ __interrupt void epwm1_isr(void)
 
 __interrupt void cpu_timer0_isr(void)
 {
-    
+    // low importancy TIMER - External communication is there
     timerCOM_cnt++;
-    if(timerCOM_cnt < 500)
+    if(timerCOM_cnt == 500)
     {
         GPIO_writePin(RED_LED, 1);
+            uint16_t gd_addr = 0;
+        for(gd_addr = 1; gd_addr <=6; gd_addr++){
+            gd[gd_addr-1].AI[1] = UCC5870_ADC_READ(readRegUCC5870(gd_addr, ADCDATA1));
+            DEVICE_DELAY_US(10);
+            gd[gd_addr-1].temperature = UCC5870_TEMPERATURE_READ(readRegUCC5870(gd_addr, ADCDATA7));
+            DEVICE_DELAY_US(10);
+            gd[gd_addr-1].DATA_SPI = readRegUCC5870(gd_addr, SPITEST);
+            DEVICE_DELAY_US(10);
     }
-    else if(timerCOM_cnt < 1000)
+    }
+    else if(timerCOM_cnt == 1000)
     {
         GPIO_writePin(RED_LED, 0);
+        timerCOM_cnt = 0;
     }
-    else if(timerCOM_cnt == 1000) timerCOM_cnt = 0;
+
     
 
     // Clear timer overflow flag (important)
@@ -274,17 +289,16 @@ __interrupt void cpu_timer1_isr(void)
     
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
-    if(timerALGO_cnt < 70)
+    if(timerALGO_cnt == 70)
     {
         GPIO_writePin(BLUE_LED, 0);
     }
-    else if(timerALGO_cnt < 150)
+    else if(timerALGO_cnt == 150)
     {
         GPIO_writePin(BLUE_LED, 1);
+        timerALGO_cnt = 0;
     }
-    else if(timerALGO_cnt == 150) timerALGO_cnt = 0;
-   
-    Read_GD1_0x14 = readRegUCC5870(0x01, 0x14);
+    
 
     
 }
