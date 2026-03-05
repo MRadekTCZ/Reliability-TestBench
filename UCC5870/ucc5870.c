@@ -391,11 +391,11 @@ void Init_UCC5870_Regs(void)
     //
     // CFG8 register settings
     //
-    ucc5870[UH].cfg8.bit.IOUT_SEL         = GATE_DRIVE_STRENGTH_FULL;
+    ucc5870[UH].cfg8.bit.IOUT_SEL         = GATE_DRIVE_STRENGTH_6th;
     ucc5870[UH].cfg8.bit.AI_ASC_MUX       = AI_ASC_MUX_AI;
     ucc5870[UH].cfg8.bit.VREF_SEL         = VREF_INTERNAL;
     ucc5870[UH].cfg8.bit.GD_2LOFF_STO_EN  = GD_2LOFF_STO_ENABLE;
-    ucc5870[UH].cfg8.bit.CRC_DIS          = CRC_CHECK_ENABLE;
+    ucc5870[UH].cfg8.bit.CRC_DIS          = CRC_CHECK_DISABLE;
     ucc5870[UH].cfg8.bit.GD_2LOFF_CURR    = GD_2LOFF_DISCHARGE_CURR_0p9A;
     ucc5870[UH].cfg8.bit.GD_2LOFF_TIME    = GD_2LOFF_PLATEAU_TIME_150ns;
     ucc5870[UH].cfg8.bit.GD_2LOFF_VOLT    = GD_2LOFF_PLATEAU_VOLT_6V;
@@ -756,7 +756,7 @@ UCC5870_Status_e Init_UCC5870()
         // Config 2 state - writing data to registers
         int addr = 0;
         for (addr = 1; addr <= 6; addr++){
-            writeRegUCC5870(addr, SPITEST, 1<<addr);
+            writeRegUCC5870(addr, SPITEST, 1000+addr);
         }
 
 

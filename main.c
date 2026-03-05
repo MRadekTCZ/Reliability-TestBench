@@ -16,7 +16,7 @@
 #define Rs 0.0036f
 #define OnebyLs 1000.0f
 #define eps_damp_coeff 24.1f
-#define Tamb 22.0f;
+#define Tamb 22.0f
 const float kpc = (1.0f/one_by_sqrt2/sqrt3);
 const float inv_kpc = 1/(1.0f/one_by_sqrt2/sqrt3);
 //GPIO
@@ -49,9 +49,9 @@ float Rdson_base = 80.0f; //mOhm
 // Electric variables
 threephase Current_est, Current_meas, U_ref, U_read;
 SVPWM svpwm;
-float Udc_base = 25.0f;
+float Udc_base = 1.0f;
 float Udc_meas;
-float Udc_ref = 25.0f;
+float Udc_ref = 1.0f;
 uint32_t Ud_read_int, Uq_read_int, omega_read_int;
 
 //CAN
@@ -63,8 +63,8 @@ uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
-uint64_t config = 0x5A5055AA;
-uint8_t CAN_on = 0;
+uint64_t config = 0x106; //106 if with Uth monitor
+uint8_t CAN_on = 1;
 
 // CPU usage assesment
 #define MAX_IDLE_2kHz 16544
@@ -80,6 +80,19 @@ uint16_t GD1_AI1, GD2_AI1;
 
 void main(void)
 {
+    //variable init
+    U_ref.dq.d = 0.3f*Udc_base;
+    U_ref.dq.q = 0.1f*Udc_base;
+    U_ref.scale = 1.0f;
+    U_ref.theta = 0.0f;
+    U_ref.omega = 50.7;
+
+    //Aging placeholder
+    Tj.up1 = Tamb; Tj.up2 = Tamb; Tj.up3 = Tamb; Tj.down1 = Tamb; Tj.down2 = Tamb; Tj.down3 = Tamb;
+    Rdson.up1 = Rdson_base; Rdson.up2 = Rdson_base; Rdson.up3 = Rdson_base; Rdson.down1 = Rdson_base; Rdson.down2 = Rdson_base; Rdson.down3 = Rdson_base;
+    Uth.up1 = Uth_base; Uth.up2 = Uth_base; Uth.up3 = Uth_base; Uth.down1 = Uth_base; Uth.down2 = Uth_base; Uth.down3 = Uth_base;
+
+
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
 
@@ -95,10 +108,33 @@ void main(void)
     GPIO_writePin(RED_LED, 0);
 
     //SPI and Gate Driver UCC5870 init
+    ERTM; // optional, enables real-time debug events
     configureSPI_GPIO();
     configureSPI(GD_SPI_BASE);
     Init_UCC5870_Regs();
     Init_UCC5870();
+
+    if(getStatus(config, VGTH_MONITOR))
+    {
+    DEVICE_DELAY_US(5000);
+    int addr = 0;
+    for (addr = 1; addr <= 6; addr++){
+        writeRegUCC5870(addr, CONTROL2, VGTH_MEAS);
+    }
+    DEVICE_DELAY_US(10000);
+    addr = 0;
+    for(addr = 1; addr <=6; addr++){
+        gd[addr-1].Uth = UCC5870_ADC_READ(readRegUCC5870(addr, ADCDATA8))*VGTH_SCALE;
+        DEVICE_DELAY_US(10);
+    }
+    Uth.up1 = gd[1].Uth;
+    Uth.down1 = gd[0].Uth;
+    Uth.up2 = gd[3].Uth;
+    Uth.down2 = gd[2].Uth;
+    Uth.up3 = gd[5].Uth;
+    Uth.down3 = gd[4].Uth;
+    }
+    
     GD_Init_LED_blink(7);
 
     // CANB pins (your board define must match the board)
@@ -124,8 +160,9 @@ void main(void)
     // Configure TX message object
     // TX message objects (enable TX interrupt if you want to track completion later)
     CANB_MSG_INIT(CAN_TX_OFFSET,CAN_TX_OFFSET+CAN_MSG_TX_AMOUNT-1,CAN_RX_OFFSET,CAN_RX_OFFSET+CAN_MSG_RX_AMOUNT-1);
+    CAN_enableAutoBusOn(CANB_BASE);
+    CAN_setAutoBusOnTime(CANB_BASE, 200000U);
     CAN_startModule(CANB_BASE);
-
 
     // Enable peripheral interrupt sources (some are already enabled inside your TI_PWM/TI_TIMER init)
     // For timer: TI_TIMER_InitHz enables timer interrupt generation, but you still must enable the CPU interrupt line:
@@ -135,19 +172,8 @@ void main(void)
     Interrupt_enable(INT_EPWM1);
     // Enable global interrupts
     Interrupt_enableMaster();
-    ERTM; // optional, enables real-time debug events
+    
 
-
-    //variable init
-    U_ref.dq.d = 0.3f*Udc_base;
-    U_ref.dq.q = 0.1f*Udc_base;
-    U_ref.scale = 1.0f;
-    U_ref.theta = 0.0f;
-    U_ref.omega = 50.7;
-    //Aging placeholder
-    Tj.up1 = Tamb; Tj.up2 = Tamb; Tj.up3 = Tamb; Tj.down1 = Tamb; Tj.down2 = Tamb; Tj.down3 = Tamb;
-    Rdson.up1 = Rdson_base; Rdson.up2 = Rdson_base; Rdson.up3 = Rdson_base; Rdson.down1 = Rdson_base; Rdson.down2 = Rdson_base; Rdson.down3 = Rdson_base;
-    Uth.up1 = Uth_base; Uth.up2 = Uth_base; Uth.up3 = Uth_base; Uth.down1 = Uth_base; Uth.down2 = Uth_base; Uth.down3 = Uth_base;
     for(;;)
     {
         idle_cnt++;
@@ -158,7 +184,7 @@ __interrupt void epwm1_isr(void)
 {
     
     //Safety turning off
-    if((getStatus(config, STATUS_OFF)|(!getStatus(config, STATUS_ON)))&&CAN_on)
+    if((getStatus(config, STATUS_OFF)||(!getStatus(config, STATUS_ON)))&&CAN_on)
     {
         U_ref.omega = 0.0f;
         U_ref.dq.d = 0.0f;
@@ -197,8 +223,10 @@ __interrupt void cpu_timer0_isr(void)
     timerCOM_cnt++;
     if(timerCOM_cnt == 500)
     {
+        
         GPIO_writePin(RED_LED, 1);
             uint16_t gd_addr = 0;
+            
         for(gd_addr = 1; gd_addr <=6; gd_addr++){
             gd[gd_addr-1].AI[1] = UCC5870_ADC_READ(readRegUCC5870(gd_addr, ADCDATA1));
             DEVICE_DELAY_US(10);
@@ -206,7 +234,8 @@ __interrupt void cpu_timer0_isr(void)
             DEVICE_DELAY_US(10);
             gd[gd_addr-1].DATA_SPI = readRegUCC5870(gd_addr, SPITEST);
             DEVICE_DELAY_US(10);
-    }
+            
+        }
     }
     else if(timerCOM_cnt == 1000)
     {
@@ -299,6 +328,10 @@ __interrupt void cpu_timer1_isr(void)
         timerALGO_cnt = 0;
     }
     
+    // Clear Timer1 interrupt source
+    CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
 
+    // Ack PIE group (Timer1 is also in group 1 on most C2000 setups)
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP1);
     
 }

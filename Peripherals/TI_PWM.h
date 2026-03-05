@@ -5,7 +5,7 @@
 #include "device.h"
 #include <stdint.h>
 #define PWM_FREQ_HZ     10000UL
-#define DEADTIME_NS     10UL
+#define DEADTIME_NS     20UL /*  x10  */
 #define TBCLK_HZ        100000000UL
 #define SYSCLK_HZ       200000000UL
 #ifdef __cplusplus

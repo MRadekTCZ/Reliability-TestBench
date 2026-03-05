@@ -46,7 +46,7 @@ uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
-uint64_t config = 0x10101A5A51001;
+uint64_t config = 0x10101A5A51005;
 void main(void){
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
@@ -82,6 +82,8 @@ void main(void){
     // Configure TX message object
     // TX message objects (enable TX interrupt if you want to track completion later)
     CANB_MSG_INIT(CAN_TX_OFFSET,CAN_TX_OFFSET+CAN_MSG_TX_AMOUNT-1,CAN_RX_OFFSET,CAN_RX_OFFSET+CAN_MSG_RX_AMOUNT-1);
+    CAN_enableAutoBusOn(CANB_BASE);
+    CAN_setAutoBusOnTime(CANB_BASE, 200000U);
     CAN_startModule(CANB_BASE);
     // Enable peripheral interrupt sources (some are already enabled inside your TI_PWM/TI_TIMER init)
     // For timer: TI_TIMER_InitHz enables timer interrupt generation, but you still must enable the CPU interrupt line:
@@ -94,8 +96,8 @@ void main(void){
 
 
     //variable init
-    U_ref.dq.d = 7.5;
-    U_ref.dq.q = 1.5;
+    U_ref.dq.d = 0.3;
+    U_ref.dq.q = 0.0;
     U_ref.scale = 1.0f;
     U_ref.theta = 0.0f;
     U_ref.omega = 314.4;
@@ -131,7 +133,7 @@ __interrupt void cpu_timer0_isr(void)
     //CAN - shift transmited data into CAN registers
 
     //Read and Send all CAN data to transmitter - cyclic FIFO
-        switch(can_rx_msg_cnt)
+        switch(can_tx_msg_cnt)
     {
         case 0:
         can_data_tx[0] = config; break;
@@ -148,6 +150,8 @@ __interrupt void cpu_timer0_isr(void)
     can_data_rx[can_rx_msg_cnt] = CAN16x8_to_u64(can_msg_rx[can_rx_msg_cnt]);
     switch(can_rx_msg_cnt)
     {
+        case 0:
+        u64_to_float3k(can_data_rx[0], &Current_meas.ph.a, &Current_meas.ph.b, &Current_meas.ph.c); break;
         case 1:
         u64_to_float3k(can_data_rx[1], &Current_meas.dq.d, &Current_meas.dq.q, &Current_meas.RMS); break;
         case 8:

@@ -133,6 +133,12 @@ SVPWM svPWM(float Ud, float Uq, float theta, float U_dc)
 	duty_cycles.d1d4 = PWM_vector_1[0] + PWM_vector_2[0] + PWM_vector_0[0];
 	duty_cycles.d2d5 = PWM_vector_1[1] + PWM_vector_2[1] + PWM_vector_0[1];
 	duty_cycles.d3d6 = PWM_vector_1[2] + PWM_vector_2[2] + PWM_vector_0[2];
+	if(modulation_index < 0.001)
+	{
+	duty_cycles.d1d4 = 0;
+	duty_cycles.d2d5 = 0;
+	duty_cycles.d3d6 = 0;
+	}
 	duty_cycles.t0 = time0_vector;
 	duty_cycles.t1 = time1_vector;
 	duty_cycles.t2 = time2_vector;

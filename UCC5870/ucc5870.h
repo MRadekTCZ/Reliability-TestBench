@@ -79,5 +79,8 @@ typedef struct{
     uint16_t DATA_SPI;
 }GD_UCC;
 
+//Diagnostics
+#define VGTH_MEAS 0x0020
+#define VGTH_SCALE 8.0f
 //=============================================================================
 #endif /* _UCC5870_H_ */

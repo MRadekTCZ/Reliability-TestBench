@@ -17,9 +17,10 @@ typedef enum
     STATUS_TEMPERATURE_NTC,
     STATUS_ATC_ACTIVE,
     STATUS_LOW_TEMP_LIMIT_ACTIVE,
-    STATUS_DRIVE_CYCLE_ON
+    STATUS_DRIVE_CYCLE_ON,
+    VGTH_MONITOR,
 
-} Status;
+}Status;
 
 void CANB_MSG_INIT(uint8_t start_tx, uint8_t end_tx, uint8_t start_rx, uint8_t end_rx);
 uint64_t CAN16x8_to_u64(uint16_t can[8]);
