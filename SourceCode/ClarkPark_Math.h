@@ -32,19 +32,21 @@ struct ThreePhase {
     struct DQ dq;
     struct AlfaBeta ab;
     float RMS;
+    float Im;
     float omega;
     float theta;
     float scale;
 };
 typedef struct ThreePhase threephase;
 
-void CurrentObserver(threephase *Voltage,threephase *current_est, float Ts, float Res, float Ls_inv, float eps_dump, float kpc);
+void CurrentObserver(threephase *Voltage,threephase *current_est, float Ts, float Res, float Ls_inv, float kpc);
 
 void DQ_to_AlfaBeta(threephase *x);
 void AlfaBeta_to_ABC(threephase *x, float kpc);
 void AlfaBeta_to_DQ(threephase *x);
 void ABC_to_AlfaBeta(threephase *x, float inv_kpc);
 void DQ_RMS(threephase *current);
+void DQ_Im(threephase *current);
 
 #endif
 

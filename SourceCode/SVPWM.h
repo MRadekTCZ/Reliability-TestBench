@@ -11,7 +11,7 @@
 #include "ClarkPark_Math.h"
 #define ANGLE_dT 0.0314159f
 
-typedef struct SVPWM_vectors {
+typedef struct PWM_vectors {
     float d1d4;
     float d2d5;
     float d3d6;
@@ -19,10 +19,10 @@ typedef struct SVPWM_vectors {
     float t1;
     float t2;
     float mod_index;
-}SVPWM;
+}PWM;
 
-SVPWM svPWM(float Ud, float Uq, float theta, float U_dc);
-
+void SVPWM(float Ud, float Uq, float angle, float U_dc, PWM *duty_cycles);
+void SPWM(float Ud, float Uq, float angle, float U_dc, PWM *duty_cycles);
 
 
 #endif /* DEVICE_SVPWM_H_ */

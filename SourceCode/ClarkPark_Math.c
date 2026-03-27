@@ -36,28 +36,43 @@ void ABC_to_AlfaBeta(threephase *x, float inv_kpc)
     x->ab.beta = (a + 2.0f * b) * one_by_sqrt3;
 }
 
-void CurrentObserver(threephase *Voltage,threephase *current_est, float Ts, float Res, float Ls_inv, float eps_dump, float kpc)
+void CurrentObserver(threephase *Voltage, threephase *current_est, float Ts, float Res, float Ls_inv, float kpc)
 {
-    float static ia_est = 0.0f;
-    float static ib_est = 0.0f;
-    float static ia_prev = 0.0f;
-    float static ib_prev = 0.0f;
-    float k1 = Ts*Ls_inv;
+    float kL;
+    float kR;
+    float v_alfa, v_beta;
 
+    /* Use same angle/frame as voltage */
+    current_est->theta = Voltage->theta;
+    current_est->omega = Voltage->omega;
+
+    /* Convert differential voltage dq -> alphabeta */
     DQ_to_AlfaBeta(Voltage);
-    ia_est = ia_prev + k1 * (Voltage->ab.alfa - Res*eps_dump*ia_prev);
-    ib_est = ib_prev + k1 * ( Voltage->ab.beta - Res*eps_dump*ib_prev);
-    ia_prev = ia_est; 
-    ib_prev = ib_est;
-    current_est->ab.alfa = ia_est;
-    current_est->ab.beta = ib_est;
-    current_est->theta = atan2f(ib_est,ia_est);
+
+    v_alfa = Voltage->ab.alfa;
+    v_beta = Voltage->ab.beta;
+
+    /* Discrete coefficients */
+    kL = Ts * Ls_inv;      /* Ts / L */
+    kR = Res * kL;         /* Ts * R / L */
+
+    /* Incremental RL observer in alphabeta */
+    current_est->ab.alfa += kL * v_alfa - kR * current_est->ab.alfa;
+    current_est->ab.beta += kL * v_beta - kR * current_est->ab.beta;
+
+    /* Convert estimated current to abc */
     AlfaBeta_to_ABC(current_est, kpc);
-    
+    AlfaBeta_to_DQ(current_est);
 }
 
 void DQ_RMS(threephase *current){
     float id = current->dq.d;
     float iq = current->dq.q;
     current->RMS = sqrtf(id*id + iq*iq)*one_by_sqrt2;
+}
+
+void DQ_Im(threephase *current){
+    float id = current->dq.d;
+    float iq = current->dq.q;
+    current->RMS = sqrtf(id*id + iq*iq);
 }

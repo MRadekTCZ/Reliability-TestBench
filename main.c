@@ -17,8 +17,9 @@
 #define OnebyLs 1000.0f
 #define eps_damp_coeff 24.1f
 #define Tamb 22.0f
-const float kpc = (1.0f/one_by_sqrt2/sqrt3);
-const float inv_kpc = 1/(1.0f/one_by_sqrt2/sqrt3);
+const float part_coeff = (1.0f/one_by_sqrt2/sqrt3);
+const float inv_part_coeff = 1.0f/(1.0f/one_by_sqrt2/sqrt3);
+float kpc, inv_kpc;
 //GPIO
 #define BLUE_LED    31
 #define GREEN_LED    25
@@ -44,11 +45,11 @@ float Ts = 0.0001f;
 //ATC algo
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
-float Rdson_base = 80.0f; //mOhm
-
+float Rdson_base = 82.0f; //mOhm
+float Rdson_real = 0.082;
 // Electric variables
 threephase Current_est, Current_meas, U_ref, U_read;
-SVPWM svpwm;
+PWM svpwm, spwm;
 float Udc_base = 1.0f;
 float Udc_meas;
 float Udc_ref = 1.0f;
@@ -179,10 +180,10 @@ void main(void)
         idle_cnt++;
     }
 }
-
+// Main PWM control
 __interrupt void epwm1_isr(void)
 {
-    
+
     //Safety turning off
     if((getStatus(config, STATUS_OFF)||(!getStatus(config, STATUS_ON)))&&CAN_on)
     {
@@ -190,10 +191,13 @@ __interrupt void epwm1_isr(void)
         U_ref.dq.d = 0.0f;
         U_ref.dq.q = 0.0f;
     }
+    //Interpreting Config for control purposes
+    if(getStatus(config, MODULATION)) kpc = part_coeff;
+    else kpc = 1.0f;
     // Update PWM
     U_ref.theta = U_ref.theta + U_ref.omega*Ts;
     if(U_ref.theta >= 2.0f*PI ) U_ref.theta = U_ref.theta - 2.0f*PI;
-    svpwm = svPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas);
+    SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm);
     DQ_to_AlfaBeta(&U_ref);
     AlfaBeta_to_ABC(&U_ref, kpc);
 
@@ -201,7 +205,7 @@ __interrupt void epwm1_isr(void)
     Ts = 1.0f/gPWMHz;
     TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, svpwm.d1d4, svpwm.d2d5, svpwm.d3d6);
 
-    CurrentObserver(&U_ref, &Current_est, Ts, Rs, OnebyLs, eps_damp_coeff, kpc);
+    CurrentObserver(&U_ref, &Current_est, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
     AlfaBeta_to_DQ(&Current_est);
     AlfaBeta_to_ABC(&Current_est, kpc);
     DQ_RMS(&Current_est);
@@ -263,9 +267,9 @@ __interrupt void cpu_timer0_isr(void)
         case 3: 
         can_data_tx[3] = float3k_to_u64(Tj.down1, Tj.down2, Tj.down3, 10.0f); break;
         case 4: 
-        can_data_tx[4] = float3k_to_u64(Current_est.ph.a, Current_est.ph.b, Current_est.ph.c,10.0f); break;
+        can_data_tx[4] = float3k_to_u64(Current_est.ph.a, Current_est.ph.b, Current_est.ph.c,100.0f); break;
         case 5:
-        can_data_tx[5] = float3k_to_u64(Current_est.dq.d, Current_est.dq.q, Current_est.RMS, 10.0f); break;
+        can_data_tx[5] = float3k_to_u64(Current_est.dq.d, Current_est.dq.q, Current_est.RMS, 100.0f); break;
         case 6:
         can_data_tx[6] = float3k_to_u64(Rdson.up1, Rdson.up2, Rdson.up3, 10.0f); break;
         case 7:
@@ -306,10 +310,12 @@ __interrupt void cpu_timer0_isr(void)
     
     // Ack PIE group for TIMER0 (usually group 1)
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP1);
-    
+    //Calcuating margin for computing time
     free_computing_time = idle_cnt;
     idle_cnt = 0;
     uCPU = 100.0f - free_computing_time * CPU_SCALE;
+
+
       
 }
 
