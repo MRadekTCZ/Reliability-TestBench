@@ -76,3 +76,15 @@ void DQ_Im(threephase *current){
     float iq = current->dq.q;
     current->RMS = sqrtf(id*id + iq*iq);
 }
+
+float moving_average(float new_sample, MA_State *s) {
+    s->sum -= s->buffer[s->index];
+    s->buffer[s->index] = new_sample;
+    s->sum += new_sample;
+
+    s->index++;
+    if (s->index >= N_AVG) s->index = 0;
+    if (s->filled < N_AVG) s->filled++;
+
+    return s->sum / s->filled;
+}

@@ -17,16 +17,17 @@ extern "C" {
 // - Complementary B + deadtime (DBRED/DBFED)
 // - ePWM1 interrupt enabled (vector/ISR handled in main)
 void TI_PWM_Init_123(uint32_t pwm_hz, uint32_t deadtime_cycles, uint32_t tbclk_hz);
-
+void TI_PWM_Init_456(uint32_t pwm_hz, uint32_t deadtime_cycles, uint32_t tbclk_hz);
 // Update duties online (0.0 .. ~0.95 recommended)
 void TI_PWM_SetDuty_123(float duty1, float duty2, float duty3);
-
+void TI_PWM_SetDuty_456(float duty1, float duty2, float duty3);
 // Optional helper (debug)
 uint16_t TI_PWM_GetTbprd(void);
 
-void TI_PWM_SetFreqHz_123(uint32_t pwm_hz, uint32_t tbclk_hz,
-                          float duty1, float duty2, float duty3);
-
+void TI_PWM_SetFreqHz_123(uint32_t pwm_hz, uint32_t tbclk_hz, float duty1, float duty2, float duty3);
+void TI_PWM_SetFreqHz_456(uint32_t pwm_hz, uint32_t tbclk_hz, float duty1, float duty2, float duty3);
+void initEPwmGpio_1_2_3(void);
+void initEPwmGpio_4_5_6(void);
 #ifdef __cplusplus
 }
 #endif

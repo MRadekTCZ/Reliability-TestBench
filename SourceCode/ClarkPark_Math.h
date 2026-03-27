@@ -10,7 +10,7 @@
 #define sqrt3 1.732050f
 #define pi_by_3 1.04719755f
 #define one_by_pi_by_3 0.9549296596425f
-
+#define N_AVG 10
 
 
 struct Phase {
@@ -39,6 +39,14 @@ struct ThreePhase {
 };
 typedef struct ThreePhase threephase;
 
+typedef struct {
+    float buffer[N_AVG];
+    float sum;
+    int index;
+    int filled;
+} MA_State;
+
+
 void CurrentObserver(threephase *Voltage,threephase *current_est, float Ts, float Res, float Ls_inv, float kpc);
 
 void DQ_to_AlfaBeta(threephase *x);
@@ -47,6 +55,8 @@ void AlfaBeta_to_DQ(threephase *x);
 void ABC_to_AlfaBeta(threephase *x, float inv_kpc);
 void DQ_RMS(threephase *current);
 void DQ_Im(threephase *current);
+float moving_average(float new_sample, MA_State *s);
+
 
 #endif
 

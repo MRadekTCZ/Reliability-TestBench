@@ -9,6 +9,7 @@
 #include "UCC5870/ucc5870.h"
 #include "UCC5870/hvp045a_io.h"
 #include "UCC5870/ucc5870_regs.h"
+#include "SourceCode/DriveCycle.h"
 #include <stdint.h>
 
 //Model parameter defines
@@ -26,7 +27,8 @@ float kpc, inv_kpc;
 #define RED_LED    34
 
 //Clocks
-
+float time = 0.0f;
+uint32_t  drive_cycle_time_ms = 0;
 // Interrupt declarations
 __interrupt void epwm1_isr(void);
 __interrupt void cpu_timer0_isr(void);
@@ -39,7 +41,7 @@ uint32_t timerCOM_cnt = 0;
 uint32_t timerALGO_cnt = 0;
 
 //ATC - PWM timer
-float gPWMratio = 1.0f;
+float gPWMratio = 2.0f;
 float Ts = 0.0001f;
 
 //ATC algo
@@ -47,9 +49,15 @@ AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
 float Rdson_base = 82.0f; //mOhm
 float Rdson_real = 0.082;
+
+//ATC drive cycle
+float HDDT_omega, HDDT_omega_filtered;
+float HDDT_Ud, HDDT_Ud_filtered;
+float HDDT_Uq, HDDT_Uq_filtered;
+MA_State ma_omega, ma_Ud, ma_Uq;
 // Electric variables
-threephase Current_est, Current_meas, U_ref, U_read;
-PWM svpwm, spwm;
+threephase Current_est, Current_meas, U_ref, U_read, U_delta;
+PWM svpwm1, spwm1, svpwm2, spwm2;
 float Udc_base = 1.0f;
 float Udc_meas;
 float Udc_ref = 1.0f;
@@ -64,8 +72,8 @@ uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
-uint64_t config = 0x106; //106 if with Uth monitor
-uint8_t CAN_on = 1;
+uint64_t config = 0x186; //186 if with Uth monitor and drive cycle going
+uint8_t CAN_on = 0;
 
 // CPU usage assesment
 #define MAX_IDLE_2kHz 16544
@@ -153,6 +161,7 @@ void main(void)
 
     // Peripheral init
     TI_PWM_Init_123(PWM_FREQ_HZ, DEADTIME_NS, TBCLK_HZ);
+    TI_PWM_Init_456(PWM_FREQ_HZ, DEADTIME_NS, TBCLK_HZ);
     TI_TIMER_InitHz(CPUTIMER0_BASE, timerCOM, DEVICE_SYSCLK_FREQ);
     TI_TIMER_InitHz(CPUTIMER1_BASE, timerALGO, DEVICE_SYSCLK_FREQ);
     // CAN init (example)
@@ -171,6 +180,8 @@ void main(void)
     Interrupt_enable(INT_TIMER1);
     // For EPWM1: TI_PWM_Init_123 enabled EPWM interrupt generation; enable CPU interrupt line:
     Interrupt_enable(INT_EPWM1);
+    // For EPWM2: TI_PWM_Init_456 enabled EPWM interrupt generation; enable CPU interrupt line:
+    //Interrupt_enable(INT_EPWM4);
     // Enable global interrupts
     Interrupt_enableMaster();
     
@@ -192,19 +203,28 @@ __interrupt void epwm1_isr(void)
         U_ref.dq.q = 0.0f;
     }
     //Interpreting Config for control purposes
-    if(getStatus(config, MODULATION)) kpc = part_coeff;
+    if(getStatus(config, MODULATION)&&CAN_on) kpc = part_coeff;
     else kpc = 1.0f;
     // Update PWM
+    if(getStatus(config, DRIVE_CYCLE_ON))
+    {
+        //
+    }
     U_ref.theta = U_ref.theta + U_ref.omega*Ts;
     if(U_ref.theta >= 2.0f*PI ) U_ref.theta = U_ref.theta - 2.0f*PI;
-    SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm);
+    //In back to back - first one (force)
+    SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm1);
+    //In back to back - back emf
+    SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm2);
     DQ_to_AlfaBeta(&U_ref);
     AlfaBeta_to_ABC(&U_ref, kpc);
 
     gPWMHz = (uint32_t)(PWM_FREQ_HZ*gPWMratio);
     Ts = 1.0f/gPWMHz;
-    TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, svpwm.d1d4, svpwm.d2d5, svpwm.d3d6);
+    TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
 
+    TI_PWM_SetFreqHz_456(PWM_FREQ_HZ, TBCLK_HZ, spwm2.d1d4, spwm2.d2d5, spwm2.d3d6);
+    //Modify current observer - if back2back U_ref = Ud - Uq)
     CurrentObserver(&U_ref, &Current_est, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
     AlfaBeta_to_DQ(&Current_est);
     AlfaBeta_to_ABC(&Current_est, kpc);
@@ -289,17 +309,19 @@ __interrupt void cpu_timer0_isr(void)
     // Read
     CAN_readMessage(CANB_BASE, CAN_RX_OFFSET+can_rx_msg_cnt, can_msg_rx[can_rx_msg_cnt]);
     can_data_rx[can_rx_msg_cnt] = CAN16x8_to_u64(can_msg_rx[can_rx_msg_cnt]);
-
+    if(CAN_on)
+    {
     switch(can_rx_msg_cnt)
     {
         case 0:  
-        config = can_data_rx[0]; break;
+            config = can_data_rx[0]; break;
         case 1:
-        if(getStatus(config, CAN_CONTROL))
-        {
-        u64_to_float3k(can_data_rx[1], &U_ref.dq.d, &U_ref.dq.q, &U_ref.omega); break;
-        }
+            if(getStatus(config, CAN_CONTROL))
+            {
+            u64_to_float3k(can_data_rx[1], &U_ref.dq.d, &U_ref.dq.q, &U_ref.omega); break;
+            }
         default: break;
+    }
     }
     
     can_tx_msg_cnt++;
@@ -314,7 +336,7 @@ __interrupt void cpu_timer0_isr(void)
     free_computing_time = idle_cnt;
     idle_cnt = 0;
     uCPU = 100.0f - free_computing_time * CPU_SCALE;
-
+    time = time + 0.0005f;
 
       
 }
@@ -322,6 +344,7 @@ __interrupt void cpu_timer0_isr(void)
 __interrupt void cpu_timer1_isr(void)
 {
     
+
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
     if(timerALGO_cnt == 70)
@@ -333,7 +356,30 @@ __interrupt void cpu_timer1_isr(void)
         GPIO_writePin(BLUE_LED, 1);
         timerALGO_cnt = 0;
     }
-    
+
+    if(getStatus(config, DRIVE_CYCLE_ON))
+    {
+    drive_cycle_time_ms = drive_cycle_time_ms + 10;
+    if(drive_cycle_time_ms < 237000)
+    {   
+        HDDT_omega = DRIVE_CYCYLE_omega_LUT[drive_cycle_time_ms/1000];
+        HDDT_Ud = DRIVE_CYCYLE_Ud_LUT[drive_cycle_time_ms/1000];
+        HDDT_Uq = DRIVE_CYCYLE_Uq_LUT[drive_cycle_time_ms/1000];
+        if ((drive_cycle_time_ms % 100) == 0)
+        {
+           HDDT_omega_filtered =  moving_average(HDDT_omega, &ma_omega);
+           HDDT_Ud_filtered =  moving_average(HDDT_Ud, &ma_Ud);
+           HDDT_Uq_filtered =  moving_average(HDDT_Uq, &ma_Uq);
+        }
+    }
+
+    else if(drive_cycle_time_ms < 250000)
+    //stop for 13 second for measurement procedures - Uth, Rdson
+    {
+
+    }  
+    else drive_cycle_time_ms = 0;
+    }
     // Clear Timer1 interrupt source
     CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
 
