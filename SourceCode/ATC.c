@@ -126,3 +126,97 @@ void ThermalModelInit(ThermalModel *thm)
     thm->Cth4 = 85.5f;
     #endif
 }
+
+void VirtualHeatsink_ThermalModelInit(ThermalModel *thm, float vhs_coeff)
+{
+    thm->Rth1 = thm->Rth1*vhs_coeff;
+    thm->Cth1 = thm->Cth1*vhs_coeff;
+    thm->Rth2 = thm->Rth2*vhs_coeff;
+    thm->Cth2 = thm->Cth2*vhs_coeff;
+    thm->Rth3 = thm->Rth3*vhs_coeff;
+    thm->Cth3 = thm->Cth3*vhs_coeff;
+    thm->Rth4 = thm->Rth4*vhs_coeff;
+    thm->Cth4 = thm->Cth4*vhs_coeff;
+}
+
+void PI_Init(PI_Controller *pi,
+             float kp,
+             float ki,
+             float ts,
+             float u_min,
+             float u_max,
+             float initial_output)
+{
+    if (pi == 0) return;
+
+    pi->kp = kp;
+    pi->ki = ki;
+    pi->ts = ts;
+    pi->u_min = u_min;
+    pi->u_max = u_max;
+
+    pi->integrator = initial_output;
+    pi->output = initial_output;
+}
+
+/* PI compute function */
+float PI_Update(PI_Controller *pi, float error)
+{
+    if (pi == 0) return 0.0f;
+
+    float p = pi->kp * error;
+
+    /* Save previous integrator for anti-windup rollback */
+    float integrator_prev = pi->integrator;
+
+    /* Integrate */
+    pi->integrator += pi->ki * pi->ts * error;
+
+    /* Unsaturated output */
+    float u = p + pi->integrator;
+
+    /* Saturation + simple anti-windup */
+    if (u > pi->u_max) {
+        u = pi->u_max;
+
+        if (error > 0.0f) {
+            pi->integrator = integrator_prev;
+        }
+    }
+    else if (u < pi->u_min) {
+        u = pi->u_min;
+
+        if (error < 0.0f) {
+            pi->integrator = integrator_prev;
+        }
+    }
+
+    pi->output = u;
+    return u;
+}
+
+float current_coupling(float i, float inom)
+{
+float gain;
+float gain_max = 5.0f, gain_min = 1.0;
+gain = inom/i;
+if (gain >= gain_max) gain = gain_max;
+else if (gain <= gain_min) gain = gain_min;
+
+return gain;
+}
+
+float ATC(PI_Controller *pid, float Tjref, float Tj, float I_pu, float I_nom, float ATC_activateRange)
+{
+float error = (Tjref - Tj)*current_coupling(I_pu, I_nom);
+float u = PI_Update(pid, error);
+if(Tj < ATC_activateRange) 
+{error = 0.0f;
+u = 1.0f;
+}
+else if(I_pu < (0.2f * I_nom))
+{error = 0.0f;
+u = 1.0f;
+}
+return  u;
+}

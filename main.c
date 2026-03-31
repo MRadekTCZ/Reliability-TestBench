@@ -49,12 +49,13 @@ AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
 float Rdson_base = 82.0f; //mOhm
 float Rdson_real = 0.082f;
-ThermalModel th_model;
+ThermalModel th_model, th_virtual_heatsink;
 ThermalState th_state_noATC, th_state_ATC;
 GateDriveParams gd_param_noATC, gd_param_ATC;
 float NTC_temperature_noATC, NTC_temperature_ATC = 60.0f;
-float Tj_est, PowerT_est;
+float Tj_est, Tj_ref, PowerT_est, PowerT_ref;
 float b2b_emul_scale;
+PI_Controller atc_pi;
 //ATC drive cycle
 
 MA_State ma_omega, ma_Ud, ma_Uq;
@@ -106,11 +107,15 @@ void main(void)
     //ATC algo inits
     float ATC_Ts = 1.0f/timerALGO;
     ThermalModelInit(&th_model);
-    Thermal_Init(&th_state_noATC, &th_model, NTC_temperature_noATC,  ATC_Ts);
+    ThermalModelInit(&th_virtual_heatsink);
+    VirtualHeatsink_ThermalModelInit(&th_virtual_heatsink, 5.0f);
+    Thermal_Init(&th_state_noATC, &th_virtual_heatsink, NTC_temperature_noATC,  ATC_Ts);
     Thermal_Init(&th_state_ATC, &th_model, NTC_temperature_ATC,  ATC_Ts);
     GateDriveParams_init(&gd_param_noATC);
     GateDriveParams_init(&gd_param_ATC);
-    b2b_emul_scale = Udc_emul* one_by_sqrt3 * 0.5;
+    b2b_emul_scale = Udc_emul*one_by_sqrt3;
+    PI_Init(&pi,0.01f,   /* kp */0.10f,   /* ki */0.01f,   /* ts */0.4f,    /* u_min */1.6f,    /* u_max */1.0f); 
+
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
 
@@ -391,7 +396,7 @@ __interrupt void cpu_timer1_isr(void)
         }
     }
 
-    else if(drive_cycle_time_ms < 250000)
+    else if(drive_cycle_time_ms < 400000)
     //stop for 13 second for measurement procedures - Uth, Rdson
     {
         HDDT_filtered.omega =  0.0f;
@@ -400,12 +405,15 @@ __interrupt void cpu_timer1_isr(void)
     }  
     else drive_cycle_time_ms = 0;
     }
-
-    //Temperature Estimation
+    //Temperature Estimation - reference case
     DQ_Im(&Current_b2b);
+    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ);
+    Tj_ref = Thermal_Step(&th_state_noATC, PowerT_ref);
+    //Temperature Estimation - ATC
     PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_emul, Current_b2b.Im, gPWMHz);
     Tj_est = Thermal_Step(&th_state_ATC, PowerT_est);
     
+    //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
 
     // Clear Timer1 interrupt source
     CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);

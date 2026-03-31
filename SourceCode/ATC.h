@@ -76,6 +76,22 @@ typedef struct
     ThermalParams p;
 } ThermalState;
 
+/* Generic PI controller */
+typedef struct {
+    /* Tunable parameters */
+    float kp;
+    float ki;
+    float ts;
+
+    /* Output limits */
+    float u_min;
+    float u_max;
+
+    /* State */
+    float integrator;
+    float output;
+} PI_Controller;
+
 float LossCalc_precise(const GateDriveParams *g, float v, float Im, float fsw);
 float LossCalc_linear(const GateDriveParams *g, float V, float Im, float fsw);
 void GateDriveParams_init(GateDriveParams *g);
@@ -88,9 +104,15 @@ void Thermal_Init(ThermalState *state,
                   float Tambient,
                   float Ts);
 
-void ThermalModelInit(ThermalModel *thm);    
-          
+void ThermalModelInit(ThermalModel *thm);  
+void VirtualHeatsink_ThermalModelInit(ThermalModel *thm, float vhs_coeff);
 
+
+
+void PI_Init(PI_Controller *pi,float kp, float ki, float ts, float u_min, float u_max, float initial_output);
+float PI_Update(PI_Controller *pi, float error);
+float current_coupling(float i, float inom);
+float ATC(PI_Controller *pid, float Tjref, float Tj, float I_pu, float I_nom, float ATC_activateRange);
 
 
 
