@@ -74,7 +74,7 @@ void DQ_RMS(threephase *current){
 void DQ_Im(threephase *current){
     float id = current->dq.d;
     float iq = current->dq.q;
-    current->RMS = sqrtf(id*id + iq*iq);
+    current->Im = sqrtf(id*id + iq*iq);
 }
 
 float moving_average(float new_sample, MA_State *s) {
