@@ -18,11 +18,11 @@ float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
     float Pcond, Eon, Eoff, Psw, Ptotal;
     float idc = fabsf(Im) * TWO_BY_PI;
 
-    Pcond = g->Ron*Im*Im/4;
-    Eon = ((g->Rg_on-5)*0.0075+0.02)*idc*v/600/1000;
+    Pcond = g->Ron*Im*Im/4.0f *2.0f; //*2 for back2back with high inductance, current flows during both sinewaves
+    Eon = ((g->Rg_on-5.0f)*0.0075f+0.02f)*idc*v/600.0f/1000.0f    *10; // just for test
 
 
-    Eoff = 0;
+    Eoff = 0.0f;
     Psw = fsw*(Eon+Eoff);
     Ptotal = (Pcond+Psw*SPWMdutyfactor);
     return Ptotal;
@@ -113,7 +113,7 @@ void ThermalModelInit(ThermalModel *thm)
     thm->Cth2 = 2.84f;
     thm->Rth3 = 0.709f;
     thm->Cth3 = 5.26f;
-    thm->Rth4 = 4.4f;
+    thm->Rth4 = 3.4f;
     thm->Cth4 = 30.0f;
     #else
     thm->Rth1 = 0.0119f;
@@ -129,14 +129,14 @@ void ThermalModelInit(ThermalModel *thm)
 
 void VirtualHeatsink_ThermalModelInit(ThermalModel *thm, float vhs_coeff)
 {
-    thm->Rth1 = thm->Rth1*vhs_coeff;
+    thm->Rth1 = thm->Rth1;
     thm->Cth1 = thm->Cth1*vhs_coeff;
-    thm->Rth2 = thm->Rth2*vhs_coeff;
+    thm->Rth2 = thm->Rth2;
     thm->Cth2 = thm->Cth2*vhs_coeff;
-    thm->Rth3 = thm->Rth3*vhs_coeff;
+    thm->Rth3 = thm->Rth3;
     thm->Cth3 = thm->Cth3*vhs_coeff;
-    thm->Rth4 = thm->Rth4*vhs_coeff;
-    thm->Cth4 = thm->Cth4*vhs_coeff;
+    thm->Rth4 = thm->Rth4;
+    thm->Cth4 = thm->Cth4;
 }
 
 void PI_Init(PI_Controller *pi,

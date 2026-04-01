@@ -28,7 +28,7 @@ float kpc, inv_kpc;
 
 //Clocks
 float time = 0.0f;
-uint32_t  drive_cycle_time_ms = 0;
+uint32_t  drive_cycle_time_ms = 220000;
 // Interrupt declarations
 __interrupt void epwm1_isr(void);
 __interrupt void cpu_timer0_isr(void);
@@ -41,21 +41,26 @@ uint32_t timerCOM_cnt = 0;
 uint32_t timerALGO_cnt = 0;
 
 //ATC - PWM timer
-float gPWMratio = 2.0f;
 float Ts = 0.0001f;
-
+uint32_t fsw_ATC;
+float fsw_ATC_ratio;
 //ATC algo
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
-float Rdson_base = 82.0f; //mOhm
-float Rdson_real = 0.082f;
+//float Rdson_base = 82.0f; //mOhm
+//float Rdson_real = 0.082f;
+float Rdson_base = 19.5f; //mOhm
+float Rdson_real = 0.0195f;
 ThermalModel th_model, th_virtual_heatsink;
-ThermalState th_state_noATC, th_state_ATC;
+ThermalState th_state_noATC, th_state_ref, th_state_ATC;
 GateDriveParams gd_param_noATC, gd_param_ATC;
-float NTC_temperature_noATC, NTC_temperature_ATC = 60.0f;
-float Tj_est, Tj_ref, PowerT_est, PowerT_ref;
+float NTC_temperature = 60.0f;
+float Tj_est, Tj_ref, Tj_noATC, PowerT_est, PowerT_ref, PowerT_noATC;
 float b2b_emul_scale;
 PI_Controller atc_pi;
+//ATC limits
+const float Inom = 30.0f;
+const float ATC_active_range = 60.0f;
 //ATC drive cycle
 
 MA_State ma_omega, ma_Ud, ma_Uq;
@@ -108,13 +113,17 @@ void main(void)
     float ATC_Ts = 1.0f/timerALGO;
     ThermalModelInit(&th_model);
     ThermalModelInit(&th_virtual_heatsink);
-    VirtualHeatsink_ThermalModelInit(&th_virtual_heatsink, 5.0f);
-    Thermal_Init(&th_state_noATC, &th_virtual_heatsink, NTC_temperature_noATC,  ATC_Ts);
-    Thermal_Init(&th_state_ATC, &th_model, NTC_temperature_ATC,  ATC_Ts);
+    VirtualHeatsink_ThermalModelInit(&th_virtual_heatsink, 2.0f);
+    Thermal_Init(&th_state_ref, &th_virtual_heatsink, NTC_temperature,  ATC_Ts);
+    Thermal_Init(&th_state_noATC, &th_model, NTC_temperature,  ATC_Ts);
+    Thermal_Init(&th_state_ATC, &th_model, NTC_temperature,  ATC_Ts);
+
     GateDriveParams_init(&gd_param_noATC);
     GateDriveParams_init(&gd_param_ATC);
-    b2b_emul_scale = Udc_emul*one_by_sqrt3;
-    PI_Init(&pi,0.01f,   /* kp */0.10f,   /* ki */0.01f,   /* ts */0.4f,    /* u_min */1.6f,    /* u_max */1.0f); 
+    b2b_emul_scale = Udc_emul*one_by_sqrt3*0.1f;
+    
+    //              kP      kI      Ts      min        max      Init value
+    PI_Init(&atc_pi, 0.01f,   0.10f,   ATC_Ts,  0.4f,    1.6f,    1.0f ); 
 
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
@@ -239,12 +248,10 @@ __interrupt void epwm1_isr(void)
     if(HDDT_filtered.theta >= 2.0f*PI ) HDDT_filtered.theta = HDDT_filtered.theta - 2.0f*PI;
     CurrentObserver(&HDDT_filtered, &Current_b2b, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
     
-    //ATC
-    gPWMHz = (uint32_t)(PWM_FREQ_HZ*gPWMratio);
-    Ts = 1.0f/gPWMHz;
+    //ATC PWM
     TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
 
-    //No ATC
+    //No ATC PWM
     TI_PWM_SetFreqHz_456(PWM_FREQ_HZ, TBCLK_HZ, spwm2.d1d4, spwm2.d2d5, spwm2.d3d6);
     
     //Modify current observer - if back2back U_ref = Ud - Uq)
@@ -385,14 +392,15 @@ __interrupt void cpu_timer1_isr(void)
     drive_cycle_time_ms = drive_cycle_time_ms + 10;
     if(drive_cycle_time_ms < 237000)
     {   
-        HDDT.omega = DRIVE_CYCYLE_omega_LUT[drive_cycle_time_ms/1000];
-        HDDT.dq.d = DRIVE_CYCYLE_Ud_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale ;
-        HDDT.dq.q = DRIVE_CYCYLE_Uq_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale;
+
         if ((drive_cycle_time_ms % 100) == 0)
         {
-           HDDT_filtered.omega =  moving_average(HDDT.omega, &ma_omega);
-           HDDT_filtered.dq.d =  moving_average(HDDT.dq.d, &ma_Ud);
-           HDDT_filtered.dq.q =  moving_average(HDDT.dq.q, &ma_Uq);
+            HDDT.omega = DRIVE_CYCYLE_omega_LUT[drive_cycle_time_ms/1000];
+            HDDT.dq.d = DRIVE_CYCYLE_Ud_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale ;
+            HDDT.dq.q = DRIVE_CYCYLE_Uq_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale;
+            HDDT_filtered.omega =  moving_average(HDDT.omega, &ma_omega);
+            HDDT_filtered.dq.d =  moving_average(HDDT.dq.d, &ma_Ud);
+            HDDT_filtered.dq.q =  moving_average(HDDT.dq.q, &ma_Uq);
         }
     }
 
@@ -407,14 +415,19 @@ __interrupt void cpu_timer1_isr(void)
     }
     //Temperature Estimation - reference case
     DQ_Im(&Current_b2b);
-    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ);
-    Tj_ref = Thermal_Step(&th_state_noATC, PowerT_ref);
+    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * 6.0f;
+    Tj_ref = Thermal_Step(&th_state_ref, PowerT_ref);
     //Temperature Estimation - ATC
-    PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_emul, Current_b2b.Im, gPWMHz);
+    PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_emul, Current_b2b.Im, gPWMHz) * 6.0f;
     Tj_est = Thermal_Step(&th_state_ATC, PowerT_est);
-    
-    //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
+    //Temperature Estimation - comparison case
+    PowerT_noATC = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * 6.0f;
+    Tj_noATC = Thermal_Step(&th_state_noATC, PowerT_noATC);
 
+    //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
+    fsw_ATC_ratio = ATC(&atc_pi, Tj_ref, Tj_est, Current_b2b.Im, Inom,ATC_active_range);
+    gPWMHz = (uint32_t)(PWM_FREQ_HZ*fsw_ATC_ratio);
+    Ts = 1.0f/gPWMHz;
     // Clear Timer1 interrupt source
     CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
 
