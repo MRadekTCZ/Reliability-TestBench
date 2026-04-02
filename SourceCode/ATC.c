@@ -19,7 +19,7 @@ float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
     float idc = fabsf(Im) * TWO_BY_PI;
 
     Pcond = g->Ron*Im*Im/4.0f *2.0f; //*2 for back2back with high inductance, current flows during both sinewaves
-    Eon = ((g->Rg_on-5.0f)*0.0075f+0.02f)*idc*v/600.0f/1000.0f    *10; // just for test
+    Eon = ((g->Rg_on-5.0f)*0.0075f+0.02f)*idc*v/600.0f/1000.0f    *2; // *2 - just for test
 
 
     Eoff = 0.0f;

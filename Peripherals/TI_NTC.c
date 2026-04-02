@@ -16,7 +16,7 @@ float NTC_conversion(float NTC_ADC_voltage, float vcc)
     R_ntc = RFIX * v_ntc/(vcc - v_ntc);
 
     // --- First rough temperature using Beta50 (closest to room temp)
-    float T1_raw = 1/(kT0 + Beta50 * logf(R_ntc*kRFIX)) - K0;
+    float T1_raw = 1.0f/(kT0 + Beta50 * logf(R_ntc*kRFIX)) - K0;
     // Linearize Beta based on temperature
     float lineBeta1 = (T1_raw - 50.0f) / 30.0f;   
 

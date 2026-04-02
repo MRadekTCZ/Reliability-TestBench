@@ -18,6 +18,7 @@
 #define OnebyLs 1000.0f
 #define eps_damp_coeff 24.1f
 #define Tamb 25.0f
+#define NMOSFET 6.0f
 const float park_coeff = (1.0f/one_by_sqrt2/sqrt3);
 const float inv_park_coeff = 1.0f/(1.0f/one_by_sqrt2/sqrt3);
 float kpc, inv_kpc;
@@ -54,7 +55,7 @@ float Rdson_real = 0.0195f;
 ThermalModel th_model, th_virtual_heatsink;
 ThermalState th_state_noATC, th_state_ref, th_state_ATC;
 GateDriveParams gd_param_noATC, gd_param_ATC;
-float NTC_temperature = 60.0f;
+float NTC_temperature = 60.0f; NTC_read_from_GD;
 float Tj_est, Tj_ref, Tj_noATC, PowerT_est, PowerT_ref, PowerT_noATC;
 float b2b_emul_scale;
 PI_Controller atc_pi;
@@ -230,16 +231,10 @@ __interrupt void epwm1_isr(void)
     if(getStatus(config, MODULATION)&&CAN_on) kpc = park_coeff;
     else kpc = 1.0f;
     // Update PWM
-    if(getStatus(config, DRIVE_CYCLE_ON))
-    {
-        //
-    }
+
     U_ref.theta = U_ref.theta + U_ref.omega*Ts;
     if(U_ref.theta >= 2.0f*PI ) U_ref.theta = U_ref.theta - 2.0f*PI;
-    //In back to back - first one (force)
-    SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm1);
-    //In back to back - back emf
-    SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm2);
+    
     DQ_to_AlfaBeta(&U_ref);
     AlfaBeta_to_ABC(&U_ref, kpc);
 
@@ -247,7 +242,20 @@ __interrupt void epwm1_isr(void)
     HDDT_filtered.theta = HDDT_filtered.theta + HDDT_filtered.omega*Ts;
     if(HDDT_filtered.theta >= 2.0f*PI ) HDDT_filtered.theta = HDDT_filtered.theta - 2.0f*PI;
     CurrentObserver(&HDDT_filtered, &Current_b2b, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
-    
+    if(getStatus(config, DRIVE_CYCLE_ON))
+    {
+        //In back to back - first one (force)
+        SPWM(HDDT_filtered.dq.d, HDDT_filtered.dq.q, HDDT_filtered.theta, Udc_emul, &spwm1);
+        //In back to back - back emf
+        SPWM(HDDT_filtered.dq.d, HDDT_filtered.dq.q, HDDT_filtered.theta, Udc_emul, &spwm2);   
+    }
+    else {
+        //In back to back - first one (force)
+        SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm1);
+        //In back to back - back emf
+        SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm2);
+
+    }
     //ATC PWM
     TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
 
@@ -256,8 +264,6 @@ __interrupt void epwm1_isr(void)
     
     //Modify current observer - if back2back U_ref = Ud - Uq)
     CurrentObserver(&U_ref, &Current_est, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
-    AlfaBeta_to_DQ(&Current_est);
-    AlfaBeta_to_ABC(&Current_est, kpc);
     DQ_RMS(&Current_est);
 
     //Test only
@@ -282,8 +288,8 @@ __interrupt void cpu_timer0_isr(void)
             uint16_t gd_addr = 0;
             
         for(gd_addr = 1; gd_addr <=6; gd_addr++){
-            gd[gd_addr-1].AI[1] = UCC5870_ADC_READ(readRegUCC5870(gd_addr, ADCDATA1));
-            DEVICE_DELAY_US(10);
+            //gd[gd_addr-1].AI[1] = UCC5870_ADC_READ(readRegUCC5870(gd_addr, ADCDATA1));
+            //DEVICE_DELAY_US(10);
             gd[gd_addr-1].temperature = UCC5870_TEMPERATURE_READ(readRegUCC5870(gd_addr, ADCDATA7));
             DEVICE_DELAY_US(10);
             gd[gd_addr-1].DATA_SPI = readRegUCC5870(gd_addr, SPITEST);
@@ -374,7 +380,9 @@ __interrupt void cpu_timer0_isr(void)
 __interrupt void cpu_timer1_isr(void)
 {
     
-
+    //NTC read
+    gd[0].AI[1] = UCC5870_ADC_READ(readRegUCC5870(1, ADCDATA1));
+    if(gd[0].AI[1] > 0.01f) NTC_read_from_GD = NTC_conversion(gd[0].AI[1], gd_param_ATC.Ug_on + gd_param_ATC.Ug_off);
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
     if(timerALGO_cnt == 70)
@@ -415,13 +423,13 @@ __interrupt void cpu_timer1_isr(void)
     }
     //Temperature Estimation - reference case
     DQ_Im(&Current_b2b);
-    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * 6.0f;
+    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * NMOSFET;
     Tj_ref = Thermal_Step(&th_state_ref, PowerT_ref);
     //Temperature Estimation - ATC
-    PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_emul, Current_b2b.Im, gPWMHz) * 6.0f;
+    PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_emul, Current_b2b.Im, gPWMHz) * NMOSFET;
     Tj_est = Thermal_Step(&th_state_ATC, PowerT_est);
     //Temperature Estimation - comparison case
-    PowerT_noATC = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * 6.0f;
+    PowerT_noATC = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * NMOSFET;
     Tj_noATC = Thermal_Step(&th_state_noATC, PowerT_noATC);
 
     //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
