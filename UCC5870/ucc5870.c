@@ -451,14 +451,14 @@ void Init_UCC5870_Regs(void)
     ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_4  = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_3  = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_2  = DONT_SAMPLE_CH;
-    ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_1  = DONT_SAMPLE_CH;
+    ucc5870[UH].adccfg.bit.ADC_ON_CH_SEL_1  = SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_7 = SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_6 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_5 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_4 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_3 = DONT_SAMPLE_CH;
     ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_2 = DONT_SAMPLE_CH;
-    ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_1 = SAMPLE_CH;
+    ucc5870[UH].adccfg.bit.ADC_OFF_CH_SEL_1 = DONT_SAMPLE_CH;
 
     //
     // DOUTCFG register settings

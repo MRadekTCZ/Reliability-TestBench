@@ -19,16 +19,13 @@ typedef enum
     LOW_TEMP_LIMIT_ACTIVE,
     DRIVE_CYCLE_ON,
     VGTH_MONITOR,
+    BACKTOBACK,
     DIRECT_SWITCH_CONTROL,
     PULSE_SWITCH_ON,
     T1_ON,
     T2_ON,
     T3_ON,
-    T4_ON,
-    T5_ON,
-    T6_ON,
-    MODULATION,
-    BACKTOBACK
+    MODULATION
 
 }Status;
 
