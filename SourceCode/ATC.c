@@ -5,12 +5,13 @@ float LossCalc_precise(const GateDriveParams *g, float v, float Im, float fsw){
     i = fabsf(Im)*TWO_BY_PI;
     float Pcond, Eon, Eoff, Psw, Ptotal;
 
-    Pcond = g->Ron*Im*Im*ONE_BY_4PI*(1*PI)*1.0;
+    Pcond = g->Ron*Im*Im*ONE_BY_4PI*(PI);
 
     Eon = v * i * 0.5f * (g->Rg_on * (g->Cgs+g->Cgd) * logf(1.0f / (1.0f - (g->Vplat / g->Ug_on)))- (g->Rg_on * (g->Cgs+g->Cgd) * logf(1.0f / (1.0f - (g->Vth / (g->Ug_on))))) + (g->Rg_on * g->Cgd * (v - g->Ron * i) / ((g->Ug_on) - g->Vplat)));
     Eoff = v * i * 0.5f * ((g->Rg_off * g->Cgd * (v - g->Ron * i) / g->Vplat) + (g->Rg_off * (g->Cgs+g->Cgd) * logf(g->Vplat/g->Vth)));
     Psw = fsw*(Eon+Eoff);
-    Ptotal = (Pcond+Psw*SPWMdutyfactor);
+    //Ptotal = (Pcond+Psw*SPWMdutyfactor);
+    Ptotal = (Pcond+Psw);
     return Ptotal;
 }
 
@@ -18,13 +19,14 @@ float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
     float Pcond, Eon, Eoff, Psw, Ptotal;
     float idc = fabsf(Im) * TWO_BY_PI;
 
-    Pcond = g->Ron*Im*Im/4.0f *2.0f; //*2 for back2back with high inductance, current flows during both sinewaves
+    Pcond = g->Ron*Im*Im/4.0f; //*2 for back2back with high inductance, current flows during both sinewaves
     Eon = ((g->Rg_on-5.0f)*0.0075f+0.02f)*idc*v/600.0f/1000.0f    *2; // *2 - just for test
 
 
     Eoff = 0.0f;
     Psw = fsw*(Eon+Eoff);
-    Ptotal = (Pcond+Psw*SPWMdutyfactor);
+    //Ptotal = (Pcond+Psw*SPWMdutyfactor);
+    Ptotal = (Pcond+Psw);
     return Ptotal;
 }
 

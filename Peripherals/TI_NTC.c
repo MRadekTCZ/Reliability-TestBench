@@ -1,7 +1,7 @@
 #include "TI_NTC.h"
 //Calibration function of NTC in GCMX
 #define RFIX 20000.0f
-#define kRFIX 1.0f/RFIX
+#define kRFIX 0.00005f // 1 / RFIX
 #define kT0 0.0033540164f
 #define K0 273.15f
 //#define Beta2580 3440.0f
@@ -11,7 +11,7 @@
 float NTC_conversion(float NTC_ADC_voltage, float vcc)
 {
     float temperature;
-    float v_ntc;
+    float v_ntc = NTC_ADC_voltage;
     float R_ntc;
     R_ntc = RFIX * v_ntc/(vcc - v_ntc);
 
@@ -25,6 +25,6 @@ float NTC_conversion(float NTC_ADC_voltage, float vcc)
     float Beta1 = Beta50*(1.0f-lineBeta1) + Beta80*lineBeta1;
 
     // --- Final temperature values
-    temperature = 1/(kT0 + Beta1 * logf(R_ntc*kRFIX)) - K0;
+    temperature = 1.0f/(kT0 + Beta1 * logf(R_ntc*kRFIX)) - K0;
     return temperature;
 }

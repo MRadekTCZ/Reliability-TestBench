@@ -4,6 +4,8 @@
 #include "Peripherals/TI_TIMER.h"
 #include "Peripherals/TI_CAN.h"
 #include "Peripherals/TI_SPI.h"
+#include "Peripherals/TI_NTC.h"
+
 #include "SourceCode/SVPWM.h"
 #include "SourceCode/ATC.h"
 #include "UCC5870/ucc5870.h"
@@ -19,9 +21,10 @@
 #define eps_damp_coeff 24.1f
 #define Tamb 25.0f
 #define NMOSFET 6.0f
+#define B2B_baseU 0.16667f
 const float park_coeff = (1.0f/one_by_sqrt2/sqrt3);
 const float inv_park_coeff = 1.0f/(1.0f/one_by_sqrt2/sqrt3);
-float kpc, inv_kpc;
+float kpc;
 //GPIO
 #define BLUE_LED    31
 #define GREEN_LED    25
@@ -55,7 +58,8 @@ float Rdson_real = 0.0195f;
 ThermalModel th_model, th_virtual_heatsink;
 ThermalState th_state_noATC, th_state_ref, th_state_ATC;
 GateDriveParams gd_param_noATC, gd_param_ATC;
-float NTC_temperature = 60.0f; NTC_read_from_GD;
+float NTC_temperature = 60.0f; 
+float NTC_read_from_GD;
 float Tj_est, Tj_ref, Tj_noATC, PowerT_est, PowerT_ref, PowerT_noATC;
 float b2b_emul_scale;
 PI_Controller atc_pi;
@@ -66,8 +70,9 @@ const float ATC_active_range = 60.0f;
 
 MA_State ma_omega, ma_Ud, ma_Uq;
 // Electric variables
-threephase Current_est, Current_meas, Current_b2b, U_ref, U_read, U_back, HDDT, HDDT_filtered;
-PWM svpwm1, spwm1, svpwm2, spwm2;
+threephase Current_est, Current_meas, Current_b2b;
+threephase U_ref, U_set, U_force, U_back, U_delta, HDDT, HDDT_filtered;
+PWM spwm1, spwm2;
 //SET PROPER UDC VOLTAGE!
 float Udc_meas, Udc_emul = 200.0f, Udc_base = 25.0f, Udc_ref = 25.0f;
 uint32_t Ud_read_int, Uq_read_int, omega_read_int;
@@ -104,7 +109,7 @@ void main(void)
     U_ref.scale = 1.0f;
     U_ref.theta = 0.0f;
     U_ref.omega = 50.7;
-
+    U_set = U_ref;
     //Aging placeholder
     Tj.up1 = Tamb; Tj.up2 = Tamb; Tj.up3 = Tamb; Tj.down1 = Tamb; Tj.down2 = Tamb; Tj.down3 = Tamb;
     Rdson.up1 = Rdson_base; Rdson.up2 = Rdson_base; Rdson.up3 = Rdson_base; Rdson.down1 = Rdson_base; Rdson.down2 = Rdson_base; Rdson.down3 = Rdson_base;
@@ -219,74 +224,116 @@ void main(void)
 // Main PWM control
 __interrupt void epwm1_isr(void)
 {
+    //Test only
+    Current_meas = Current_est;//Test only
+    Udc_meas = Udc_base;
 
-    //Safety turning off
-    if((getStatus(config, STATUS_OFF)||(!getStatus(config, STATUS_ON)))&&CAN_on)
+
+    if(CAN_on)
     {
-        U_ref.omega = 0.0f;
-        U_ref.dq.d = 0.0f;
-        U_ref.dq.q = 0.0f;
+        U_set = U_ref;
     }
-    //Interpreting Config for control purposes
-    if(getStatus(config, MODULATION)&&CAN_on) kpc = park_coeff;
-    else kpc = 1.0f;
-    // Update PWM
+    //U ref (set from CAN)
+    U_set.theta = U_set.theta + U_set.omega*Ts;
+    if(U_set.theta >= 2.0f*PI ) U_set.theta = U_set.theta - 2.0f*PI; 
+    DQ_to_AlfaBeta(&U_set);
+    AlfaBeta_to_ABC(&U_set, kpc);
+    //Current Observer from Uref
+    CurrentObserver(&U_set, &Current_est, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
+    DQ_RMS(&Current_est);
 
-    U_ref.theta = U_ref.theta + U_ref.omega*Ts;
-    if(U_ref.theta >= 2.0f*PI ) U_ref.theta = U_ref.theta - 2.0f*PI;
-    
-    DQ_to_AlfaBeta(&U_ref);
-    AlfaBeta_to_ABC(&U_ref, kpc);
 
-    //Back to Back emulation
+    //HDDT Voltage delta
     HDDT_filtered.theta = HDDT_filtered.theta + HDDT_filtered.omega*Ts;
     if(HDDT_filtered.theta >= 2.0f*PI ) HDDT_filtered.theta = HDDT_filtered.theta - 2.0f*PI;
     CurrentObserver(&HDDT_filtered, &Current_b2b, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
+
     if(getStatus(config, DRIVE_CYCLE_ON))
     {
-        //In back to back - first one (force)
-        SPWM(HDDT_filtered.dq.d, HDDT_filtered.dq.q, HDDT_filtered.theta, Udc_emul, &spwm1);
-        //In back to back - back emf
-        SPWM(HDDT_filtered.dq.d, HDDT_filtered.dq.q, HDDT_filtered.theta, Udc_emul, &spwm2);   
+        U_delta = HDDT_filtered;
     }
-    else {
-        //In back to back - first one (force)
-        SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm1);
-        //In back to back - back emf
-        SPWM(U_ref.dq.d, U_ref.dq.q, U_ref.theta, Udc_meas, &spwm2);
+    else U_delta = U_set;
+
+    //B2B voltages
+    U_force.dq.d = B2B_baseU*Udc_meas + U_delta.dq.d * 0.5f;
+    U_force.dq.q = B2B_baseU*Udc_meas + U_delta.dq.q * 0.5f;
+    U_back.dq.d = B2B_baseU*Udc_meas - U_delta.dq.d * 0.5f;
+    U_back.dq.q = B2B_baseU*Udc_meas - U_delta.dq.q * 0.5f;
+    U_force.omega = U_delta.omega;
+    U_force.theta = U_delta.theta;
+    U_back.omega = U_delta.omega;
+    U_back.theta = U_delta.theta;
+
+    if(getStatus(config, BACKTOBACK))
+    {
+        // Force PWM - Inverter 1 (EPWM 1,2,3)
+        SPWM(U_force.dq.d, U_force.dq.q, U_force.theta, Udc_meas, &spwm1);
+        // Back EMF - Inverter 2 (EPWM 4,5,6)
+        SPWM(U_back.dq.d, U_back.dq.q, U_back.theta, Udc_meas, &spwm2);
+    }
+    else
+    {
+        if(getStatus(config, MODULATION))
+        {
+            // Open loop Uref
+            SVPWM(U_set.dq.d, U_set.dq.q, U_set.theta, Udc_meas, &spwm1);
+            // Alternative open loop Uref
+            SVPWM(U_set.dq.d, U_set.dq.q, U_set.theta, Udc_meas, &spwm2);
+        }
+        else
+        {
+             // Open loop Uref
+            SPWM(U_set.dq.d, U_set.dq.q, U_set.theta, Udc_meas, &spwm1);
+            // Alternative open loop Uref
+            SPWM(U_set.dq.d, U_set.dq.q, U_set.theta, Udc_meas, &spwm2);           
+        }
 
     }
+
+
     //Force Test Output
+    //Diagnostic of inverter 1 - EPWM1,2,3
     if(getStatus(config, DIRECT_SWITCH_CONTROL))
     {
+        EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+        EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+        EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
         if(getStatus(config, T1_ON))
         {
         EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
         }
+        else EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+        if(getStatus(config, T2_ON))
+        {
+        EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+        }
+        else EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+        if(getStatus(config, T3_ON))
+        {
+        EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+        }
+        else EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);        
+        
     }
     else 
     {
-    EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
-    EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-    EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-    EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
-    EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-    EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+        EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
+        EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+        EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+        EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
+        EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+        EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
     }
 
     //ATC PWM
-    TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
+    if(getStatus(config, ATC_ACTIVE))
+    {
+        TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
+    }
+    else TI_PWM_SetFreqHz_123(PWM_FREQ_HZ, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
 
     //No ATC PWM
     TI_PWM_SetFreqHz_456(PWM_FREQ_HZ, TBCLK_HZ, spwm2.d1d4, spwm2.d2d5, spwm2.d3d6);
-    
-    //Modify current observer - if back2back U_ref = Ud - Uq)
-    CurrentObserver(&U_ref, &Current_est, Ts, Rs+Rdson_real*2, OnebyLs, kpc);
-    DQ_RMS(&Current_est);
-
-    //Test only
-    Current_meas = Current_est;//Test only
-    Udc_meas = Udc_base;
     
     // Clear ePWM interrupt flag
     EPWM_clearEventTriggerInterruptFlag(EPWM1_BASE);
@@ -363,6 +410,7 @@ __interrupt void cpu_timer0_isr(void)
     // Read
     CAN_readMessage(CANB_BASE, CAN_RX_OFFSET+can_rx_msg_cnt, can_msg_rx[can_rx_msg_cnt]);
     can_data_rx[can_rx_msg_cnt] = CAN16x8_to_u64(can_msg_rx[can_rx_msg_cnt]);
+
     if(CAN_on)
     {
     switch(can_rx_msg_cnt)
@@ -383,7 +431,19 @@ __interrupt void cpu_timer0_isr(void)
     if(can_tx_msg_cnt >= (CAN_MSG_TX_AMOUNT)) can_tx_msg_cnt = 0;
     if(can_rx_msg_cnt >= (CAN_MSG_RX_AMOUNT)) can_rx_msg_cnt = 0;
     //CAN - Decode read CAN data
-    
+    //Safety turning off
+    if((getStatus(config, STATUS_OFF)||(!getStatus(config, STATUS_ON))))
+    {
+        U_ref.omega = 0.0f;
+        U_ref.dq.d = 0.0f;
+        U_ref.dq.q = 0.0f;
+    }
+    //Interpreting Config for control purposes
+    if(getStatus(config, MODULATION)&&CAN_on) kpc = park_coeff;
+    else kpc = 1.0f;
+
+
+
     // Ack PIE group for TIMER0 (usually group 1)
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP1);
     //Calcuating margin for computing time
@@ -400,7 +460,7 @@ __interrupt void cpu_timer1_isr(void)
     
     //NTC read
     gd[0].AI[1] = UCC5870_ADC_READ(readRegUCC5870(1, ADCDATA1));
-    if(gd[0].AI[1] > 0.01f) NTC_read_from_GD = NTC_conversion(gd[0].AI[1], gd_param_ATC.Ug_on + gd_param_ATC.Ug_off);
+    if(gd[0].AI[1] > 0.01f) NTC_read_from_GD = NTC_conversion(gd[0].AI[1], gd_param_ATC.Ug_on + gd_param_ATC.Ug_off); //15.5 v =~ 15.0v + diode voltage drop
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
     if(timerALGO_cnt == 70)
