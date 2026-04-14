@@ -18,7 +18,6 @@
 #define Ls 0.001f
 #define Rs 0.0036f
 #define OnebyLs 1000.0f
-#define eps_damp_coeff 24.1f
 #define Tamb 25.0f
 #define NMOSFET 6.0f
 #define B2B_baseU 0.16667f
@@ -75,7 +74,7 @@ threephase U_ref, U_set, U_force, U_back, U_delta, HDDT, HDDT_filtered;
 PWM spwm1, spwm2;
 //SET PROPER UDC VOLTAGE!
 float Udc_meas, Udc_emul = 200.0f, Udc_base = 25.0f, Udc_ref = 25.0f;
-uint32_t Ud_read_int, Uq_read_int, omega_read_int;
+
 
 //CAN
 #define CAN_TX_OFFSET 10
@@ -104,9 +103,8 @@ uint16_t GD1_AI1, GD2_AI1;
 void main(void)
 {
     //variable init
-    U_ref.dq.d = 0.3f*Udc_base;
-    U_ref.dq.q = 0.1f*Udc_base;
-    U_ref.scale = 1.0f;
+    U_ref.dq.d = 0.0f;
+    U_ref.dq.q = 0.0f;
     U_ref.theta = 0.0f;
     U_ref.omega = 50.7;
     U_set = U_ref;
@@ -189,10 +187,12 @@ void main(void)
     Interrupt_register(INT_TIMER1, &cpu_timer1_isr);
 
     // Peripheral init
+    SysCtl_disablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC); // Disable PWM Clock to Sync PWM123 and PWM456 later
     TI_PWM_Init_123(PWM_FREQ_HZ, DEADTIME_NS, TBCLK_HZ);
     TI_PWM_Init_456(PWM_FREQ_HZ, DEADTIME_NS, TBCLK_HZ);
     TI_TIMER_InitHz(CPUTIMER0_BASE, timerCOM, DEVICE_SYSCLK_FREQ);
     TI_TIMER_InitHz(CPUTIMER1_BASE, timerALGO, DEVICE_SYSCLK_FREQ);
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC); // PWM123 and PWM456 Sync
     // CAN init (example)
     CAN_initModule(CANB_BASE);
     CAN_setBitRate(CANB_BASE, DEVICE_SYSCLK_FREQ, 500000, 16);
@@ -251,6 +251,7 @@ __interrupt void epwm1_isr(void)
     if(getStatus(config, DRIVE_CYCLE_ON))
     {
         U_delta = HDDT_filtered;
+        U_set = HDDT_filtered;
     }
     else U_delta = U_set;
 
@@ -293,44 +294,45 @@ __interrupt void epwm1_isr(void)
 
     //Force Test Output
     //Diagnostic of inverter 1 - EPWM1,2,3
+    
     if(getStatus(config, DIRECT_SWITCH_CONTROL))
     {
-        EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
-        EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
-        EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
-        if(getStatus(config, T1_ON))
+        if(getStatus(config, AUTOMATED_TEST))
         {
-        EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+            //Add 200 ms timer (which locks T for this testing procedure)
         }
-        else EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
-        if(getStatus(config, T2_ON))
+        else 
         {
-        EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+            EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+            EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+            EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+            if(getStatus(config, T1_ON))
+            {
+            EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+            }
+            else EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+            if(getStatus(config, T2_ON))
+            {
+            EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+            }
+            else EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+            if(getStatus(config, T3_ON))
+            {
+            EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
+            }
+            else EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW); 
         }
-        else EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
-        if(getStatus(config, T3_ON))
-        {
-        EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_HIGH);
-        }
-        else EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);        
+        
+               
         
     }
-    else 
-    {
-        EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
-        EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-        EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-        EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
-        EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-        EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
-    }
+    else if(!getStatus(config, DRIVE_CYCLE_ON)) EPWM_DISABLE_FORCE_ALL();
+
 
     //ATC PWM
-    if(getStatus(config, ATC_ACTIVE))
-    {
-        TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
-    }
-    else TI_PWM_SetFreqHz_123(PWM_FREQ_HZ, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
+
+    TI_PWM_SetFreqHz_123(gPWMHz, TBCLK_HZ, spwm1.d1d4, spwm1.d2d5, spwm1.d3d6);
+
 
     //No ATC PWM
     TI_PWM_SetFreqHz_456(PWM_FREQ_HZ, TBCLK_HZ, spwm2.d1d4, spwm2.d2d5, spwm2.d3d6);
@@ -460,7 +462,7 @@ __interrupt void cpu_timer1_isr(void)
     
     //NTC read
     gd[0].AI[1] = UCC5870_ADC_READ(readRegUCC5870(1, ADCDATA1));
-    if(gd[0].AI[1] > 0.01f) NTC_read_from_GD = NTC_conversion(gd[0].AI[1], gd_param_ATC.Ug_on + gd_param_ATC.Ug_off); //15.5 v =~ 15.0v + diode voltage drop
+    if(gd[0].AI[1] > 0.01f) NTC_read_from_GD = NTC_conversion(gd[0].AI[1], gd_param_ATC.Ug_on - 0.7f); //15.0 v - diode voltage drop
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
     if(timerALGO_cnt == 70)
@@ -475,29 +477,35 @@ __interrupt void cpu_timer1_isr(void)
 
     if(getStatus(config, DRIVE_CYCLE_ON))
     {
-    drive_cycle_time_ms = drive_cycle_time_ms + 10;
-    if(drive_cycle_time_ms < 237000)
-    {   
+        if(drive_cycle_time_ms == 0) EPWM_DISABLE_FORCE_ALL();
+        drive_cycle_time_ms = drive_cycle_time_ms + 10;
+            
+            if(drive_cycle_time_ms < 237000)
+            {   
+                
+                if ((drive_cycle_time_ms % 100) == 0)
+                {
+                    HDDT.omega = DRIVE_CYCYLE_omega_LUT[drive_cycle_time_ms/1000];
+                    HDDT.dq.d = DRIVE_CYCYLE_Ud_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale ;
+                    HDDT.dq.q = DRIVE_CYCYLE_Uq_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale;
+                    HDDT_filtered.omega =  moving_average(HDDT.omega, &ma_omega);
+                    HDDT_filtered.dq.d =  moving_average(HDDT.dq.d, &ma_Ud);
+                    HDDT_filtered.dq.q =  moving_average(HDDT.dq.q, &ma_Uq);
+                }
+            }
 
-        if ((drive_cycle_time_ms % 100) == 0)
-        {
-            HDDT.omega = DRIVE_CYCYLE_omega_LUT[drive_cycle_time_ms/1000];
-            HDDT.dq.d = DRIVE_CYCYLE_Ud_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale ;
-            HDDT.dq.q = DRIVE_CYCYLE_Uq_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale;
-            HDDT_filtered.omega =  moving_average(HDDT.omega, &ma_omega);
-            HDDT_filtered.dq.d =  moving_average(HDDT.dq.d, &ma_Ud);
-            HDDT_filtered.dq.q =  moving_average(HDDT.dq.q, &ma_Uq);
-        }
-    }
+            else if(drive_cycle_time_ms < 400000)
+            //stop for 13 second for measurement procedures - Uth, Rdson
+            {
+                HDDT_filtered.omega =  0.0f;
+                HDDT_filtered.dq.d =  0.0f;
+                HDDT_filtered.dq.q =  0.0f;
+                EPWM_FORCE_OFF_ALL();
 
-    else if(drive_cycle_time_ms < 400000)
-    //stop for 13 second for measurement procedures - Uth, Rdson
-    {
-        HDDT_filtered.omega =  0.0f;
-        HDDT_filtered.dq.d =  0.0f;
-        HDDT_filtered.dq.q =  0.0f;
-    }  
-    else drive_cycle_time_ms = 0;
+                // SPACE FOR AUTOMATED TEST
+
+            }  
+            else drive_cycle_time_ms = 0;
     }
     //Temperature Estimation - reference case
     DQ_Im(&Current_b2b);
@@ -512,7 +520,12 @@ __interrupt void cpu_timer1_isr(void)
 
     //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
     fsw_ATC_ratio = ATC(&atc_pi, Tj_ref, Tj_est, Current_b2b.Im, Inom,ATC_active_range);
-    gPWMHz = (uint32_t)(PWM_FREQ_HZ*fsw_ATC_ratio);
+    if(getStatus(config, ATC_ACTIVE))
+    {     
+        gPWMHz = (uint32_t)(PWM_FREQ_HZ*fsw_ATC_ratio);
+    }
+    else gPWMHz = PWM_FREQ_HZ;
+
     Ts = 1.0f/gPWMHz;
     // Clear Timer1 interrupt source
     CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
