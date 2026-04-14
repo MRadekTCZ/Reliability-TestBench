@@ -21,7 +21,7 @@ typedef enum
     VGTH_MONITOR,
     BACKTOBACK,
     DIRECT_SWITCH_CONTROL,
-    PULSE_SWITCH_ON,
+    AUTOMATED_TEST,
     T1_ON,
     T2_ON,
     T3_ON,

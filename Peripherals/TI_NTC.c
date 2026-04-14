@@ -1,7 +1,7 @@
 #include "TI_NTC.h"
 //Calibration function of NTC in GCMX
-#define RFIX 20000.0f
-#define kRFIX 0.00005f // 1 / RFIX
+#define RFIX 22000.0f
+#define kRFIX 0.0000454545f // 1 / RFIX
 #define kT0 0.0033540164f
 #define K0 273.15f
 //#define Beta2580 3440.0f

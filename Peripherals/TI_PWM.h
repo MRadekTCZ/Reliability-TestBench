@@ -28,6 +28,12 @@ void TI_PWM_SetFreqHz_123(uint32_t pwm_hz, uint32_t tbclk_hz, float duty1, float
 void TI_PWM_SetFreqHz_456(uint32_t pwm_hz, uint32_t tbclk_hz, float duty1, float duty2, float duty3);
 void initEPwmGpio_1_2_3(void);
 void initEPwmGpio_4_5_6(void);
+
+void EPWM_FORCE_OFF_ALL(void);
+void EPWM_DISABLE_FORCE_ALL(void);
+
+void AUTOMATED_EPWM_TEST(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -128,7 +128,9 @@ void TI_PWM_Init_123(uint32_t pwm_hz, uint32_t deadtime_cycles, uint32_t tbclk_h
     EPWM_setInterruptEventCount(EPWM1_BASE, 1U);
 
     // Re-enable TBCLK
-    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+    //SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+    // Force one sync event so slaves latch phase = 0 immediately
+    EPWM_forceSyncPulse(EPWM1_BASE);
 }
 void TI_PWM_Init_456(uint32_t pwm_hz, uint32_t deadtime_cycles, uint32_t tbclk_hz)
 {
@@ -153,7 +155,10 @@ void TI_PWM_Init_456(uint32_t pwm_hz, uint32_t deadtime_cycles, uint32_t tbclk_h
     EPWM_setInterruptEventCount(EPWM4_BASE, 1U);
 
     // Re-enable TBCLK
-    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+    //SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+
+    // After everything is enabled, send one sync from EPWM1
+    EPWM_forceSyncPulse(EPWM1_BASE);
 }
 void TI_PWM_SetDuty_123(float duty1, float duty2, float duty3)
 {
@@ -244,4 +249,29 @@ void TI_PWM_SetFreqHz_456(uint32_t pwm_hz, uint32_t tbclk_hz, float duty1, float
                                 (uint16_t)(duty3 * (float)tbprd));
 
     gTbprd = tbprd;
+}
+
+void EPWM_FORCE_OFF_ALL(void)
+{
+    EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+    EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+    EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+    EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+    EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+    EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_A,EPWM_AQ_SW_OUTPUT_LOW);
+}
+
+void EPWM_DISABLE_FORCE_ALL(void)
+{
+    EPWM_setActionQualifierContSWForceAction(EPWM1_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
+    EPWM_setActionQualifierContSWForceAction(EPWM2_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+    EPWM_setActionQualifierContSWForceAction(EPWM3_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+    EPWM_setActionQualifierContSWForceAction(EPWM4_BASE, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
+    EPWM_setActionQualifierContSWForceAction(EPWM5_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+    EPWM_setActionQualifierContSWForceAction(EPWM6_BASE, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+}
+
+void AUTOMATED_EPWM_TEST(void)
+{
+    ;//place holder
 }
