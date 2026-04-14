@@ -35,7 +35,6 @@ struct ThreePhase {
     float Im;
     float omega;
     float theta;
-    float scale;
 };
 typedef struct ThreePhase threephase;
 

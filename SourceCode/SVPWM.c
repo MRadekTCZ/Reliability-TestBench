@@ -183,9 +183,9 @@ u_beta = Ud * sinf(angle) + Uq * cosf(angle);
 	}
 	else
 	{
-	duty_cycles->d1d4 = 0;
-	duty_cycles->d2d5 = 0;
-	duty_cycles->d3d6 = 0;
+	duty_cycles->d1d4 = 0.0f;
+	duty_cycles->d2d5 = 0.0f;
+	duty_cycles->d3d6 = 0.0f;
 	}
     /* Clamp to [0, 1] */
     if (duty_cycles->d1d4 < 0.0f) duty_cycles->d1d4 = 0.0f;
