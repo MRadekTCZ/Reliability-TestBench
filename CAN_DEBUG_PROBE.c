@@ -2,21 +2,16 @@
 #include "device.h"
 #include "Peripherals/TI_TIMER.h"
 #include "Peripherals/TI_CAN.h"
-#include "SourceCode/SVPWM.h"
+#include "SourceCode/ClarkPark_Math.h"
 #include "SourceCode/ATC.h"
 #include <stdint.h>
 
 //Model parameter defines
-#define Ls 0.001f
-#define Rs 0.0036f
-#define OnebyLs 1000.0f
-#define eps_damp_coeff 24.1f
-#define Tamb 22.0f;
+#define Tamb 22.0f
 const float kpc = (1.0f/one_by_sqrt2/sqrt3);
 const float inv_kpc = 1/(1.0f/one_by_sqrt2/sqrt3);
 //GPIO
 #define BLUE_LED    31
-#define GREEN_LED    25
 #define RED_LED    34
 //Clocks
 __interrupt void cpu_timer0_isr(void);
@@ -31,6 +26,9 @@ uint32_t timerALGO_cnt = 0;
 threephase Current_est, Current_meas, U_ref, U_read;
 float Udc_base = 25.0f;
 float Udc_meas;
+float gate_strenght = 1.0f;
+float set_freq_kHz = 20.0f;
+float Ug_set = 15.0f;
 //Aging params
 //ATC algo
 AgingParam Tj, Rdson, Uth;
@@ -39,14 +37,14 @@ float Rdson_base = 0.0f;
 
 //CAN
 #define CAN_TX_OFFSET 25
-#define CAN_MSG_TX_AMOUNT 2
+#define CAN_MSG_TX_AMOUNT 3
 #define CAN_RX_OFFSET 10
 #define CAN_MSG_RX_AMOUNT 11
 uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
-uint64_t config = 0x10101A5A51005;
+uint64_t config = 0x105;
 void main(void){
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
@@ -96,15 +94,11 @@ void main(void){
 
 
     //variable init
-    U_ref.dq.d = 0.3;
-    U_ref.dq.q = 0.0;
-    U_ref.scale = 1.0f;
+    U_ref.dq.d = 0.0f;
+    U_ref.dq.q = 0.0f;
     U_ref.theta = 0.0f;
     U_ref.omega = 314.4;
-    //Aging placeholder
-    Tj.up1 = Tamb; Tj.up2 = Tamb; Tj.up3 = Tamb; Tj.down1 = Tamb; Tj.down2 = Tamb; Tj.down3 = Tamb;
-    Rdson.up1 = Rdson_base; Rdson.up2 = Rdson_base; Rdson.up3 = Rdson_base; Rdson.down1 = Rdson_base; Rdson.down2 = Rdson_base; Rdson.down3 = Rdson_base;
-    Uth.up1 = Uth_base; Uth.up2 = Uth_base; Uth.up3 = Uth_base; Uth.down1 = Uth_base; Uth.down2 = Uth_base; Uth.down3 = Uth_base;
+ 
     //CAN DATA
     for(;;)
     {
@@ -139,6 +133,8 @@ __interrupt void cpu_timer0_isr(void)
         can_data_tx[0] = config; break;
         case 1:
         can_data_tx[1] = float3k_to_u64(U_ref.dq.d, U_ref.dq.q, U_ref.omega, 10.0f); break;
+        case 2:
+        can_data_tx[2] = float3k_to_u64(set_freq_kHz, gate_strenght, Ug_set, 10.0f); break;
         default: break;
     }
     // Send
@@ -186,4 +182,7 @@ __interrupt void cpu_timer1_isr(void)
         GPIO_writePin(BLUE_LED, 1);
     }
     else if(timerALGO_cnt == 150) timerALGO_cnt = 0;
+
+    CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP1);
 }
