@@ -10,24 +10,25 @@
 
 typedef enum
 {
-    STATUS_ON = 0,
-    STATUS_OFF,
-    CAN_CONTROL,
-    CURRENT_MEASURED,
-    TEMPERATURE_NTC,
-    ATC_ACTIVE,
-    LOW_TEMP_LIMIT_ACTIVE,
-    DRIVE_CYCLE_ON,
-    VGTH_MONITOR,
-    BACKTOBACK,
-    DIRECT_SWITCH_CONTROL,
-    AUTOMATED_TEST,
-    T1_ON,
-    T2_ON,
-    T3_ON,
-    MODULATION
+    STATUS_ON               = 0,
+    STATUS_OFF              = 1,
+    CAN_CONTROL             = 2,
+    CURRENT_MEASURED        = 3,
+    TEMPERATURE_NTC         = 4,
+    ATC_ACTIVE              = 5,
+    LOW_TEMP_LIMIT_ACTIVE   = 6,
+    DRIVE_CYCLE_ON          = 7,
+    VGTH_MONITOR            = 8,
+    BACKTOBACK              = 9,
+    DIRECT_SWITCH_CONTROL   = 10,
+    AUTOMATED_TEST          = 11,
+    T1_ON                   = 12,
+    T2_ON                   = 13,
+    T3_ON                   = 14,
+    MODULATION              = 15,
+    FREQ_FORCE_SET          = 16
 
-}Status;
+} Status;
 
 void CANB_MSG_INIT(uint8_t start_tx, uint8_t end_tx, uint8_t start_rx, uint8_t end_rx);
 uint64_t CAN16x8_to_u64(uint16_t can[8]);

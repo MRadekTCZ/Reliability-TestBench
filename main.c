@@ -19,7 +19,6 @@
 #define Rs 0.0036f
 #define OnebyLs 1000.0f
 #define Tamb 25.0f
-#define NMOSFET 6.0f
 #define B2B_baseU 0.16667f
 const float park_coeff = (1.0f/one_by_sqrt2/sqrt3);
 const float inv_park_coeff = 1.0f/(1.0f/one_by_sqrt2/sqrt3);
@@ -29,8 +28,10 @@ float kpc;
 #define GREEN_LED    25
 #define RED_LED    34
 
+
+uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
+uint8_t CAN_on = 1;
 //Clocks
-float time = 0.0f;
 uint32_t  drive_cycle_time_ms = 220000;
 // Interrupt declarations
 __interrupt void epwm1_isr(void);
@@ -46,25 +47,33 @@ uint32_t timerALGO_cnt = 0;
 //ATC - PWM timer
 float Ts = 0.0001f;
 uint32_t fsw_ATC;
-float fsw_ATC_ratio;
+float fsw_ATC_ratio = 1.0f;
+float fsw_force_set_kHz = 20.0f;
+float gate_strenght = 4.0; //[A] 5-30
+uint16_t CFG8_write = 0x2;
+
 //ATC algo
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
+
 //float Rdson_base = 82.0f; //mOhm
 //float Rdson_real = 0.082f;
 float Rdson_base = 19.5f; //mOhm
 float Rdson_real = 0.0195f;
 ThermalModel th_model, th_virtual_heatsink;
-ThermalState th_state_noATC, th_state_ref, th_state_ATC;
+ThermalState th_state_noATC, th_state_ref, th_state_ATC, th_state_real_NTC;
 GateDriveParams gd_param_noATC, gd_param_ATC;
-float NTC_temperature = 60.0f; 
+float temp_offset = 0.0f; 
 float NTC_read_from_GD;
+float Tj_NTCbased;
 float Tj_est, Tj_ref, Tj_noATC, PowerT_est, PowerT_ref, PowerT_noATC;
 float b2b_emul_scale;
+float NMOSFET  = 6.0f;
 PI_Controller atc_pi;
+
 //ATC limits
 const float Inom = 30.0f;
-const float ATC_active_range = 60.0f;
+const float ATC_active_range = 30.0f;
 //ATC drive cycle
 
 MA_State ma_omega, ma_Ud, ma_Uq;
@@ -80,19 +89,19 @@ float Udc_meas, Udc_emul = 200.0f, Udc_base = 25.0f, Udc_ref = 25.0f;
 #define CAN_TX_OFFSET 10
 #define CAN_MSG_TX_AMOUNT 11
 #define CAN_RX_OFFSET 25
-#define CAN_MSG_RX_AMOUNT 2
+#define CAN_MSG_RX_AMOUNT 3
 uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
-uint64_t config = 0x186; //186 if with Uth monitor and drive cycle going
-uint8_t CAN_on = 0;
+
 
 // CPU usage assesment
 #define MAX_IDLE_2kHz 16544
 #define CPU_SCALE 0.00604487f
 uint32_t idle_cnt;
 uint32_t free_computing_time;
+float CPU_computing_time;
 float uCPU; //0 - 100%
 
 
@@ -103,11 +112,11 @@ uint16_t GD1_AI1, GD2_AI1;
 void main(void)
 {
     //variable init
-    U_ref.dq.d = 0.0f;
-    U_ref.dq.q = 0.0f;
-    U_ref.theta = 0.0f;
-    U_ref.omega = 50.7;
-    U_set = U_ref;
+    U_set.dq.d = 0.0f;
+    U_set.dq.q = 0.0f;
+    U_set.theta = 0.0f;
+    U_set.omega = 314.7;
+    U_ref = U_set;
     //Aging placeholder
     Tj.up1 = Tamb; Tj.up2 = Tamb; Tj.up3 = Tamb; Tj.down1 = Tamb; Tj.down2 = Tamb; Tj.down3 = Tamb;
     Rdson.up1 = Rdson_base; Rdson.up2 = Rdson_base; Rdson.up3 = Rdson_base; Rdson.down1 = Rdson_base; Rdson.down2 = Rdson_base; Rdson.down3 = Rdson_base;
@@ -118,9 +127,10 @@ void main(void)
     ThermalModelInit(&th_model);
     ThermalModelInit(&th_virtual_heatsink);
     VirtualHeatsink_ThermalModelInit(&th_virtual_heatsink, 2.0f);
-    Thermal_Init(&th_state_ref, &th_virtual_heatsink, NTC_temperature,  ATC_Ts);
-    Thermal_Init(&th_state_noATC, &th_model, NTC_temperature,  ATC_Ts);
-    Thermal_Init(&th_state_ATC, &th_model, NTC_temperature,  ATC_Ts);
+    Thermal_Init(&th_state_ref, &th_virtual_heatsink, temp_offset,  ATC_Ts);
+    Thermal_Init(&th_state_noATC, &th_model, temp_offset,  ATC_Ts);
+    Thermal_Init(&th_state_ATC, &th_model, temp_offset,  ATC_Ts);
+    Thermal_Init(&th_state_real_NTC, &th_model, temp_offset,  ATC_Ts);
 
     GateDriveParams_init(&gd_param_noATC);
     GateDriveParams_init(&gd_param_ATC);
@@ -228,14 +238,14 @@ __interrupt void epwm1_isr(void)
     Current_meas = Current_est;//Test only
     Udc_meas = Udc_base;
 
-
+    //U ref (set from CAN)
+    U_ref.theta = U_ref.theta + U_ref.omega*Ts;
+    if(U_ref.theta >= 2.0f*PI ) U_ref.theta = U_ref.theta - 2.0f*PI; 
     if(CAN_on)
     {
         U_set = U_ref;
     }
-    //U ref (set from CAN)
-    U_set.theta = U_set.theta + U_set.omega*Ts;
-    if(U_set.theta >= 2.0f*PI ) U_set.theta = U_set.theta - 2.0f*PI; 
+
     DQ_to_AlfaBeta(&U_set);
     AlfaBeta_to_ABC(&U_set, kpc);
     //Current Observer from Uref
@@ -386,9 +396,9 @@ __interrupt void cpu_timer0_isr(void)
         case 1:
         can_data_tx[1] = float3k_to_u64(Current_meas.dq.d, Current_meas.dq.q, Current_meas.RMS,100.0f); break;
         case 2:
-        can_data_tx[2] = float3k_to_u64(Tj.up1, Tj.up2, Tj.up3,10.0f); break;
+        can_data_tx[2] = float3k_to_u64(NTC_read_from_GD, Tj_NTCbased, Tj_est, 10.0f); break; //Real temperature
         case 3: 
-        can_data_tx[3] = float3k_to_u64(Tj.down1, Tj.down2, Tj.down3, 10.0f); break;
+        can_data_tx[3] = float3k_to_u64(Tj_ref, Tj_noATC, gd[0].temperature, 10.0f); break; //Reference temperatures + GD temperature
         case 4: 
         can_data_tx[4] = float3k_to_u64(Current_est.ph.a, Current_est.ph.b, Current_est.ph.c,100.0f); break;
         case 5:
@@ -420,10 +430,9 @@ __interrupt void cpu_timer0_isr(void)
         case 0:  
             config = can_data_rx[0]; break;
         case 1:
-            if(getStatus(config, CAN_CONTROL))
-            {
             u64_to_float3k(can_data_rx[1], &U_ref.dq.d, &U_ref.dq.q, &U_ref.omega); break;
-            }
+        case 2:
+            u64_to_float3k(can_data_rx[2], &fsw_force_set_kHz, &gd_param_ATC.Ug_on, &U_ref.omega); break;
         default: break;
     }
     }
@@ -452,7 +461,7 @@ __interrupt void cpu_timer0_isr(void)
     free_computing_time = idle_cnt;
     idle_cnt = 0;
     uCPU = 100.0f - free_computing_time * CPU_SCALE;
-    time = time + 0.0005f;
+    CPU_computing_time = CPU_computing_time + 0.0005f;
 
       
 }
@@ -461,8 +470,9 @@ __interrupt void cpu_timer1_isr(void)
 {
     
     //NTC read
-    gd[0].AI[1] = UCC5870_ADC_READ(readRegUCC5870(1, ADCDATA1));
+    gd[0].AI[1] = UCC5870_ADC_READ(readRegUCC5870(2, ADCDATA1));
     if(gd[0].AI[1] > 0.01f) NTC_read_from_GD = NTC_conversion(gd[0].AI[1], gd_param_ATC.Ug_on - 0.7f); //15.0 v - diode voltage drop
+    //NTC_read_from_GD = NTC_conversion(gd[5].AI[1], 15.0f - 0.5f);
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
     if(timerALGO_cnt == 70)
@@ -510,13 +520,16 @@ __interrupt void cpu_timer1_isr(void)
     //Temperature Estimation - reference case
     DQ_Im(&Current_b2b);
     PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * NMOSFET;
-    Tj_ref = Thermal_Step(&th_state_ref, PowerT_ref);
+    Tj_ref = Thermal_Step(&th_state_ref, PowerT_ref) + Tamb;
     //Temperature Estimation - ATC
     PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_emul, Current_b2b.Im, gPWMHz) * NMOSFET;
-    Tj_est = Thermal_Step(&th_state_ATC, PowerT_est);
+    Tj_est = Thermal_Step(&th_state_ATC, PowerT_est) + Tamb;
     //Temperature Estimation - comparison case
     PowerT_noATC = LossCalc_linear(&gd_param_noATC, Udc_emul, Current_b2b.Im, PWM_FREQ_HZ) * NMOSFET;
-    Tj_noATC = Thermal_Step(&th_state_noATC, PowerT_noATC);
+    Tj_noATC = Thermal_Step(&th_state_noATC, PowerT_noATC) + Tamb;
+    
+    //Temperature Estimation - Estimated better with help of NTC
+    Tj_NTCbased = Thermal_Step(&th_state_ATC, PowerT_est) + NTC_read_from_GD;
 
     //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
     fsw_ATC_ratio = ATC(&atc_pi, Tj_ref, Tj_est, Current_b2b.Im, Inom,ATC_active_range);
@@ -526,6 +539,28 @@ __interrupt void cpu_timer1_isr(void)
     }
     else gPWMHz = PWM_FREQ_HZ;
 
+    if(getStatus(config, FREQ_FORCE_SET))
+    {
+        if(gate_strenght < 5.0f) {
+        CFG8_write = 0x026A;
+        gd_param_ATC.Rg_on = 3.9f * 6.0f;
+        }
+        else if (gate_strenght < 10.0f) {
+        CFG8_write = 0x0269;
+        gd_param_ATC.Rg_on = 3.9f * 3.0f;
+        }
+        else {CFG8_write = 0x0268;
+        gd_param_ATC.Rg_on = 3.9f * 1.0f;
+        }
+        int addr = 0;
+        for (addr = 1; addr <= 6; addr++){
+            writeRegUCC5870(addr, CFG8, CFG8_write);         
+        }
+        uint16_t CFG8_check;
+        CFG8_check = readRegUCC5870(1, CFG8);
+        DEVICE_DELAY_US(10);
+    gPWMHz = (uint32_t)(PWM_FREQ_HZ*fsw_force_set_kHz*0.1f);
+    } 
     Ts = 1.0f/gPWMHz;
     // Clear Timer1 interrupt source
     CPUTimer_clearOverflowFlag(CPUTIMER1_BASE);
