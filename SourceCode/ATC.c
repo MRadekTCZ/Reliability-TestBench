@@ -20,7 +20,7 @@ float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
     float idc = fabsf(Im) * TWO_BY_PI;
 
     Pcond = g->Ron*Im*Im/4.0f; //*2 for back2back with high inductance, current flows during both sinewaves
-    Eon = ((g->Rg_on-5.0f)*0.0075f+0.02f)*idc*v/600.0f/1000.0f;//    *2; // *2 - just for test
+    Eon = (0.01375f + 0.00158333f * g->Rg_on)*idc*v/600.0f/1000.0f;//    *2; // *2 - just for test
 
 
     Eoff = 0.0f;
@@ -39,7 +39,7 @@ void GateDriveParams_init(GateDriveParams *g)
     g->Rg_off  = 3.9f;
     g->Ug_on   = 15.0f;
     g->Ug_off  = -5.0f;
-    g->Ug      = 23.0f;
+    g->Ug      = 20.0f;
     g->Qg      = 235e-9f;
     g->Cgd     = 0.22e-9f;
     g->Cgs 		= 6.18e-9f;
@@ -109,14 +109,14 @@ float Thermal_Step(ThermalState *state, float Power)
 void ThermalModelInit(ThermalModel *thm)
 {
     #ifdef GCMX020A
-    thm->Rth1 = 0.17f;
-    thm->Cth1 = 0.476f;
-    thm->Rth2 = 0.119f;
-    thm->Cth2 = 2.84f;
-    thm->Rth3 = 0.709f;
-    thm->Cth3 = 5.26f;
-    thm->Rth4 = 3.4f;
-    thm->Cth4 = 30.0f;
+    thm->Rth1 = 0.0867f;
+    thm->Cth1 = 0.00934f;
+    thm->Rth2 = 0.0607f;
+    thm->Cth2 = 0.0557f;
+    thm->Rth3 = 0.3616f;
+    thm->Cth3 = 0.1031f;
+    thm->Rth4 = 29.8f;
+    thm->Cth4 = 1.5f;
     #else
     thm->Rth1 = 0.0119f;
     thm->Cth1 = 0.458f;
@@ -138,7 +138,7 @@ void VirtualHeatsink_ThermalModelInit(ThermalModel *thm, float vhs_coeff)
     thm->Rth3 = thm->Rth3;
     thm->Cth3 = thm->Cth3*vhs_coeff;
     thm->Rth4 = thm->Rth4;
-    thm->Cth4 = thm->Cth4;
+    thm->Cth4 = thm->Cth4*vhs_coeff;
 }
 
 void PI_Init(PI_Controller *pi,
