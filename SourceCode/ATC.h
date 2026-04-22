@@ -114,7 +114,7 @@ float PI_Update(PI_Controller *pi, float error);
 float current_coupling(float i, float inom);
 float ATC(PI_Controller *pid, float Tjref, float Tj, float I_pu, float I_nom, float ATC_activateRange);
 
-
+float DeadTimeVoltageCompensation(unsigned int fsw, unsigned int deadtime);
 
 
 #endif

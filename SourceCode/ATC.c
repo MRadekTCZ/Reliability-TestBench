@@ -35,7 +35,7 @@ void GateDriveParams_init(GateDriveParams *g)
 {
     #ifdef GCMX020A
     g->Ron     = 0.0195f;
-    g->Rg_on   = 3.9f;
+    g->Rg_on   = (3.9f + 15.0f);
     g->Rg_off  = 3.9f;
     g->Ug_on   = 15.0f;
     g->Ug_off  = -5.0f;
@@ -221,4 +221,16 @@ else if(I_pu < (0.2f * I_nom))
 u = 1.0f;
 }
 return  u;
+}
+
+float DeadTimeVoltageCompensation(unsigned int fsw_Hz, unsigned int deadtime)
+{
+    const float C = 0.00001f;
+
+    float fsw_kHz = (float)fsw_Hz / 1000.0f;   // Hz → kHz
+    float deadtime_ns = (float)deadtime;       // already in ns
+
+    float k = C * deadtime_ns * fsw_kHz;
+
+    return 1.0f+k;
 }

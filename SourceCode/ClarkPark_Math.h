@@ -10,7 +10,7 @@
 #define sqrt3 1.732050f
 #define pi_by_3 1.04719755f
 #define one_by_pi_by_3 0.9549296596425f
-#define N_AVG 10
+#define N_AVG 2
 
 
 struct Phase {
