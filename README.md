@@ -10,6 +10,9 @@ Hipothesis - ATC improves MOSFET lifetime
 Testbench and methodolgy is described in my paper: Active Thermal Control optimization and evaluation with detailed simulation and different lifetime models
 
 Hardware setup:
-2 x LAUNCHXL-F28379D/n
-2 x GCMX020A120B2T1P (Inverter modules connected back2back)/n
+
+2 x LAUNCHXL-F28379D
+
+2 x GCMX020A120B2T1P (Inverter modules connected back2back)
+
 Designed gate driver board with additional diagnostic features. Used Gate Driver IC: UCC5870-Q1
