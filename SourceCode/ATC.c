@@ -20,7 +20,7 @@ float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
     float idc = fabsf(Im) * TWO_BY_PI;
 
     Pcond = g->Ron*Im*Im/4.0f; //*2 for back2back with high inductance, current flows during both sinewaves
-    Eon = (0.01375f + 0.00158333f * g->Rg_on)*idc*v/600.0f/1000.0f;//    *2; // *2 - just for test
+    Eon = (0.01375f + 0.00158333f * g->Rg_on)*idc*v/600.0f/1000.0f;//    2; // *2 - just for test
 
 
     Eoff = 0.0f;
@@ -109,14 +109,14 @@ float Thermal_Step(ThermalState *state, float Power)
 void ThermalModelInit(ThermalModel *thm)
 {
     #ifdef GCMX020A
-    thm->Rth1 = 0.0867f;
-    thm->Cth1 = 0.00934f;
-    thm->Rth2 = 0.0607f;
-    thm->Cth2 = 0.0557f;
-    thm->Rth3 = 0.3616f;
-    thm->Cth3 = 0.1031f;
-    thm->Rth4 = 29.8f;
-    thm->Cth4 = 1.5f;
+    thm->Rth1 = 0.51;
+    thm->Cth1 = 0.002f;
+    thm->Rth2 = 5.6f;
+    thm->Cth2 = 1.9;
+    thm->Rth3 = 10.0f;
+    thm->Cth3 = 5.6f;
+    thm->Rth4 = 10.0f;
+    thm->Cth4 = 11.317f;
     #else
     thm->Rth1 = 0.0119f;
     thm->Cth1 = 0.458f;
@@ -223,14 +223,13 @@ u = 1.0f;
 return  u;
 }
 
-float DeadTimeVoltageCompensation(unsigned int fsw_Hz, unsigned int deadtime)
+float DeadTimeVoltageCompensation(unsigned int fsw_Hz, unsigned int deadtime, float Udc)
 {
-    const float C = 0.00001f;
 
     float fsw_kHz = (float)fsw_Hz / 1000.0f;   // Hz → kHz
     float deadtime_ns = (float)deadtime;       // already in ns
+    float C = 0.000001; // Ns and kHz scale
+    float voltage_compensation = deadtime_ns * C * fsw_kHz * Udc;
 
-    float k = C * deadtime_ns * fsw_kHz;
-
-    return 1.0f+k;
+    return voltage_compensation;
 }

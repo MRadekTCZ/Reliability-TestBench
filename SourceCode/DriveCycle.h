@@ -1,6 +1,9 @@
 #ifndef DRIVECYCLE
 #define DRIVECYCLE
-extern const float DRIVE_CYCYLE_omega_LUT[237];
-extern const float DRIVE_CYCYLE_Ud_LUT[237];
-extern const float DRIVE_CYCYLE_Uq_LUT[237];
+#define DRIVE_CYCLE_LENGTH 2701
+#define DRIVE_CYCLE_PERIOD (1.0f/270100.0f)
+#include "device.h"
+extern const uint8_t DRIVE_CYCLE_omega_LUT[DRIVE_CYCLE_LENGTH];
+extern const uint8_t DRIVE_CYCLE_Ud_LUT[DRIVE_CYCLE_LENGTH];
+extern const uint8_t DRIVE_CYCLE_Uq_LUT[DRIVE_CYCLE_LENGTH];
 #endif

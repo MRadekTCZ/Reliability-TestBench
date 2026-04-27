@@ -3,6 +3,7 @@
 
 #include <math.h>
 #define PI 3.141592653f//;
+#define TWO_PI 6.283185307f
 #define one_by_sqrt6 0.40824829f
 #define one_by_sqrt3 0.57735f
 #define one_by_sqrt2 0.70710678f
