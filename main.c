@@ -58,7 +58,7 @@ float fsw_ATC_ratio = 1.0f;
 float fsw_force_set_kHz = 20.0f;
 float gate_strenght = 14.0; //[A] 5-30
 uint16_t CFG8_write = 0x0;
-
+#define VIRTUAL_HEATSINK_COEFF 1.5f
 //ATC algo
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
@@ -136,11 +136,16 @@ void main(void)
     ThermalModelInit(&th_model);
     ThermalModelInit(&th_virtual_heatsink);
     // Base plate temperature directly from NTC
-    ThermalModelInit(&th_bare_bond_wire);
+    th_bare_bond_wire.Rth1 = 0.0867f;
+    th_bare_bond_wire.Cth1 = 0.00934f;
+    th_bare_bond_wire.Rth2 = 0.0607f;
+    th_bare_bond_wire.Cth2 = 0.0557f;
+    th_bare_bond_wire.Rth3 = 0.3616f;
+    th_bare_bond_wire.Cth3 = 0.1031f;
     th_bare_bond_wire.Rth4 = 0.00001f;
     th_bare_bond_wire.Cth4 = 0.00001f;
 
-    VirtualHeatsink_ThermalModelInit(&th_virtual_heatsink, 1.3f);
+    VirtualHeatsink_ThermalModelInit(&th_virtual_heatsink, VIRTUAL_HEATSINK_COEFF);
     Thermal_Init(&th_state_ref, &th_virtual_heatsink, temp_offset,  ATC_Ts);
     Thermal_Init(&th_state_noATC, &th_model, temp_offset,  ATC_Ts);
     Thermal_Init(&th_state_ATC, &th_model, temp_offset,  ATC_Ts);
@@ -152,7 +157,7 @@ void main(void)
     b2b_emul_scale = Udc_base/600.0f;
     
     //              kP      kI      Ts      min        max      Init value
-    PI_Init(&atc_pi, 0.01f,   0.10f,   ATC_Ts,  0.375f,    1.625f,    1.0f ); 
+    PI_Init(&atc_pi, 0.1f,   0.20f,   ATC_Ts,  0.375f,    1.625f,    1.0f ); 
 
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();

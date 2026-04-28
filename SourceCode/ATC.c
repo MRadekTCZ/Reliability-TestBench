@@ -110,9 +110,9 @@ void ThermalModelInit(ThermalModel *thm)
 {
     #ifdef GCMX020A
     thm->Rth1 = 0.51;
-    thm->Cth1 = 0.002f;
+    thm->Cth1 = 0.01f;
     thm->Rth2 = 5.6f;
-    thm->Cth2 = 1.9;
+    thm->Cth2 = 1.9f;
     thm->Rth3 = 10.0f;
     thm->Cth3 = 5.6f;
     thm->Rth4 = 10.0f;
