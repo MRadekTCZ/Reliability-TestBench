@@ -17,14 +17,18 @@ const float inv_kpc = 1/(1.0f/one_by_sqrt2/sqrt3);
 __interrupt void cpu_timer0_isr(void);
 __interrupt void cpu_timer1_isr(void);
 // Interrupt counters
-uint32_t timerCOM = 1000; // Hz of timer 0 - adjustable in debugger
+uint32_t timerCOM = 2000; // Hz of timer 0 - adjustable in debugger
 uint32_t timerALGO = 100;
 uint32_t timerCOM_cnt = 0;
 uint32_t timerALGO_cnt = 0;
 
+//Automated test
+uint8_t automated_test = 0;
+uint32_t automated_test_counter = 0;
+
 // Electric variables
 threephase Current_est, Current_meas, U_ref, U_read;
-float Udc_base = 25.0f;
+float Udc_base = 70.0f;
 float Udc_meas;
 float gate_strenght = 1.0f;
 float set_freq_kHz = 20.0f;
@@ -35,6 +39,11 @@ AgingParam Tj, Rdson, Uth;
 float Uth_base = 0.0f;
 float Rdson_base = 0.0f;
 
+//Temperature monitor
+float Tj_est, Tj_NTC_based, T_NTC;
+float Tj_ref, Tj_NoATC, fsw_khz;
+float Tj_max_drivecycle, Tj_avg_drivecycle, Tj_start;
+float PowerT_est;
 //CAN
 #define CAN_TX_OFFSET 25
 #define CAN_MSG_TX_AMOUNT 3
@@ -44,7 +53,7 @@ uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
 uint64_t can_data_rx[CAN_MSG_RX_AMOUNT];
-uint64_t config = 0x105;
+uint64_t config = 0x10005;
 void main(void){
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
@@ -97,7 +106,7 @@ void main(void){
     U_ref.dq.d = 0.0f;
     U_ref.dq.q = 0.0f;
     U_ref.theta = 0.0f;
-    U_ref.omega = 314.4;
+    U_ref.omega = 0.0f;
  
     //CAN DATA
     for(;;)
@@ -118,6 +127,19 @@ __interrupt void cpu_timer0_isr(void)
     }
     else if(timerCOM_cnt == 1000) timerCOM_cnt = 0;
 
+    if(automated_test){
+        if(automated_test_counter < 10000){U_ref.dq.d = 20.0; U_ref.omega = 2000.0f;}
+        else if(automated_test_counter < 30000){U_ref.dq.d = 0.0; U_ref.omega = 0.0f;}
+        else if(automated_test_counter < 40000){U_ref.dq.d = 10.0; U_ref.omega = 300.0f;}
+        else if(automated_test_counter < 60000){U_ref.dq.d = 0.0; U_ref.omega = 0.0f;}
+        else if(automated_test_counter < 70000){U_ref.dq.d = 2.5; U_ref.omega = 30.0f;}
+        else if(automated_test_counter < 90000){U_ref.dq.d = 0.0; U_ref.omega = 0.0f;}
+        else if(automated_test_counter < 100000){U_ref.dq.d = 2.5; U_ref.omega = 10.0f;}
+        else if(automated_test_counter < 120000){U_ref.dq.d = 0.0; U_ref.omega = 0.0f;}
+        else {automated_test_counter = 0; automated_test = 0;}
+        automated_test_counter++;
+    }
+    
 
     // Clear timer overflow flag (important)
     CPUTimer_clearOverflowFlag(CPUTIMER0_BASE);
@@ -132,7 +154,7 @@ __interrupt void cpu_timer0_isr(void)
         case 0:
         can_data_tx[0] = config; break;
         case 1:
-        can_data_tx[1] = float3k_to_u64(U_ref.dq.d, U_ref.dq.q, U_ref.omega, 10.0f); break;
+        can_data_tx[1] = float3k_to_u64(U_ref.dq.d, U_ref.dq.q, U_ref.omega, 50.0f); break;
         case 2:
         can_data_tx[2] = float3k_to_u64(set_freq_kHz, gate_strenght, Ug_set, 10.0f); break;
         default: break;
@@ -150,6 +172,12 @@ __interrupt void cpu_timer0_isr(void)
         u64_to_float3k(can_data_rx[0], &Current_meas.ph.a, &Current_meas.ph.b, &Current_meas.ph.c); break;
         case 1:
         u64_to_float3k(can_data_rx[1], &Current_meas.dq.d, &Current_meas.dq.q, &Current_meas.RMS); break;
+        case 2:
+        u64_to_float3k(can_data_rx[2], &T_NTC, &Tj_NTC_based, &Tj_est); break;
+        case 3:
+        u64_to_float3k(can_data_rx[3], &PowerT_est, &Tj_NoATC, &fsw_khz); break;
+        case 4:
+        u64_to_float3k(can_data_rx[4], &Tj_max_drivecycle, &Tj_start, &Tj_ref); break;
         case 8:
         u64_to_float3k(can_data_rx[8], &Uth.up1, &Uth.up2, &Uth.up3); break;
         default: break;
