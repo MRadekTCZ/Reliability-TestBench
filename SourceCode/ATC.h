@@ -15,8 +15,8 @@
 #define Afactor 1.0f
 #define ALFA_LOSS_LINEAR_COEFF 0.0075f
 #define ALFA_LOSS_LINEAR_OFFSET 5.0f
-#define GCMX020A
-
+//#define GCMX020A
+#define GCMX080A
 
 
 

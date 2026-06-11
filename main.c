@@ -15,10 +15,22 @@
 #include <stdint.h>
 
 //Model parameter defines
+#ifdef GCMX080A
+#define Ls 0.00043f
+#define Rs 0.06f
+#define CableR 0.7f
+#define OnebyLs 2325.581f
+float Rdson_base = 80.0f; //mOhm //+ measured offset (cables)
+float Rdson_real = 0.08f;
+#endif
+#ifdef GCMX020A
 #define Ls 0.001f
 #define Rs 0.0036f
 #define CableR 0.1f
 #define OnebyLs 1000.0f
+float Rdson_base = 19.5f;
+float Rdson_real = 0.0195f;
+#endif
 #define Tamb 25.0f
 #define B2B_baseU 0.16667f
 const float park_coeff = (1.0f/one_by_sqrt2/sqrt3);
@@ -63,10 +75,8 @@ uint16_t CFG8_write = 0x0;
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
 
-//float Rdson_base = 82.0f; //mOhm
-//float Rdson_real = 0.082f;
-float Rdson_base = 19.5f + 10.0; //mOhm //+ measured offset (cables)
-float Rdson_real = 0.0195f;
+
+
 ThermalModel th_model, th_virtual_heatsink, th_bare_bond_wire;
 ThermalState th_state_noATC, th_state_ref, th_state_ATC, th_state_real_NTC;
 GateDriveParams gd_param_noATC, gd_param_ATC;
@@ -91,7 +101,7 @@ threephase U_ref, U_set, U_force, U_back, U_delta, HDDT, HDDT_filtered;
 PWM spwm1, spwm2;
 float Udq_deadtime_comp;
 //SET PROPER UDC VOLTAGE!
-float Udc_meas, Udc_emul = 70.0f, Udc_base = 70.0f;
+float Udc_meas, Udc_emul = 300.0f, Udc_base = 300.0f;
 
 
 //CAN
@@ -124,7 +134,7 @@ void main(void)
     U_set.dq.d = 0.0f;
     U_set.dq.q = 0.0f;
     U_set.theta = 0.0f;
-    U_set.omega = 314.7;
+    U_set.omega = 314.7f*3.0f;
     U_ref = U_set;
     //Aging placeholder
     Tj.up1 = Tamb; Tj.up2 = Tamb; Tj.up3 = Tamb; Tj.down1 = Tamb; Tj.down2 = Tamb; Tj.down3 = Tamb;
@@ -154,7 +164,7 @@ void main(void)
     GateDriveParams_init(&gd_param_noATC);
     GateDriveParams_init(&gd_param_ATC);
 
-    b2b_emul_scale = Udc_base/600.0f;
+    b2b_emul_scale = 600.0f/10.0f/Udc;
     
     //              kP      kI      Ts      min        max      Init value
     PI_Init(&atc_pi, 0.1f,   0.20f,   ATC_Ts,  0.375f,    1.625f,    1.0f ); 
@@ -179,7 +189,7 @@ void main(void)
     configureSPI(GD_SPI_BASE);
     Init_UCC5870_Regs();
     Init_UCC5870();
-
+    DEVICE_DELAY_US(10000);
     if(getStatus(config, VGTH_MONITOR))
     {
     DEVICE_DELAY_US(5000);
@@ -303,7 +313,7 @@ __interrupt void epwm1_isr(void)
     if(getStatus(config, BACKTOBACK))
     {
         //Current Observer
-        CurrentObserver(&U_delta, &Current_est, Ts, Rs+Rdson_real*2+CableR, OnebyLs, kpc);
+        CurrentObserver(&U_delta, &Current_est, Ts, (Rs+Rdson_real+CableR), OnebyLs, kpc);
         // Force PWM - Inverter 1 (EPWM 1,2,3)
         SPWM(U_force.dq.d, U_force.dq.q, U_force.theta, Udc_meas, &spwm1);
         // Back EMF - Inverter 2 (EPWM 4,5,6)

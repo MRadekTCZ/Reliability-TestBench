@@ -20,9 +20,12 @@ float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
     float idc = fabsf(Im) * TWO_BY_PI;
 
     Pcond = g->Ron*Im*Im/4.0f; //*2 for back2back with high inductance, current flows during both sinewaves
+    #ifdef GCMX020A
     Eon = (0.01375f + 0.00158333f * g->Rg_on)*idc*v/600.0f/1000.0f;//    2; // *2 - just for test
-
-
+    #endif
+    #ifdef GCMX080A
+    Eon = (0.00623f + 0.11f * g->Rg_on)*idc/10.0f*v/600.0f/1000.0f;//    2; // *2 - just for test
+    #endif
     Eoff = 0.0f;
     Psw = fsw*(Eon+Eoff);
     //Ptotal = (Pcond+Psw*SPWMdutyfactor);
@@ -45,7 +48,21 @@ void GateDriveParams_init(GateDriveParams *g)
     g->Cgs 		= 6.18e-9f;
     g->Vplat   = 4.32;
     g->Vth     = 3.6f;
-    #else
+    #endif
+    #ifdef GCMX080A
+    g->Ron     = 0.0195f;
+    g->Rg_on   = (3.9f + 15.0f);
+    g->Rg_off  = 3.9f;
+    g->Ug_on   = 15.0f;
+    g->Ug_off  = -5.0f;
+    g->Ug      = 20.0f;
+    g->Qg      = 235e-9f;
+    g->Cgd     = 0.22e-9f;
+    g->Cgs 		= 6.18e-9f;
+    g->Vplat   = 4.32;
+    g->Vth     = 3.6f;
+    #endif
+    #ifdef FS01MR08
     g->Ron     = 0.00165f;
     g->Rg_on   = 10.5f;
     g->Rg_off  = 4.2f;
@@ -117,7 +134,22 @@ void ThermalModelInit(ThermalModel *thm)
     thm->Cth3 = 5.6f;
     thm->Rth4 = 10.0f;
     thm->Cth4 = 11.317f;
-    #else
+    #endif
+
+    //Thermal model holder - to be estimated from measurements
+    #ifdef GCMX080A
+    thm->Rth1 = 0.51;
+    thm->Cth1 = 0.01f;
+    thm->Rth2 = 5.6f;
+    thm->Cth2 = 1.9f;
+    thm->Rth3 = 10.0f;
+    thm->Cth3 = 5.6f;
+    thm->Rth4 = 10.0f;
+    thm->Cth4 = 11.317f;
+    #endif
+
+
+    #ifdef FS01MR08
     thm->Rth1 = 0.0119f;
     thm->Cth1 = 0.458f;
     thm->Rth2 = 0.0422f;
