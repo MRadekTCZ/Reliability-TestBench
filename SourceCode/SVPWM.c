@@ -128,7 +128,7 @@ PWM_vector_0[1] = 0.5f * time0_vector;
 PWM_vector_0[2] = 0.5f * time0_vector;
 
 //Sum of time vectors
-if(modulation_index >= 0.005f){
+if(modulation_index >= 0.01f){
 duty_cycles->d1d4 = PWM_vector_1[0] + PWM_vector_2[0] + PWM_vector_0[0];
 duty_cycles->d2d5 = PWM_vector_1[1] + PWM_vector_2[1] + PWM_vector_0[1];
 duty_cycles->d3d6 = PWM_vector_1[2] + PWM_vector_2[2] + PWM_vector_0[2];
@@ -175,7 +175,7 @@ u_beta = Ud * sinf(angle) + Uq * cosf(angle);
     Ub = -0.5f * u_alfa + 0.86602540378f * u_beta;   /* +sqrt(3)/2 * u_beta */
     Uc = -0.5f * u_alfa - 0.86602540378f * u_beta;   /* -sqrt(3)/2 * u_beta */
 
-	if(modulation_index >= 0.005f){
+	if(modulation_index >= 0.01f){
     /* SPWM duty cycles */
     duty_cycles->d1d4 = 0.5f + (Ua / U_dc);
     duty_cycles->d2d5 = 0.5f + (Ub / U_dc);

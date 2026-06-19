@@ -15,11 +15,31 @@ float LossCalc_precise(const GateDriveParams *g, float v, float Im, float fsw){
     return Ptotal;
 }
 
-float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw){
+float RdsonTempMultiplier(float T)
+{
+    float k;
+
+    if (T <= 25.0f)
+    {
+        k = 1.0f;
+    }
+    else if (T >= 150.0f)
+    {
+        k = 1.33f;
+    }
+    else
+    {
+        k = 1.0f + (T - 25.0f) * (1.33f - 1.0f) / (150.0f - 25.0f);
+    }
+
+    return k;
+}
+
+float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw, float T){
     float Pcond, Eon, Eoff, Psw, Ptotal;
     float idc = fabsf(Im) * TWO_BY_PI;
-
-    Pcond = g->Ron*Im*Im/4.0f; //*2 for back2back with high inductance, current flows during both sinewaves
+    float Ron_T =  g->Ron * RdsonTempMultiplier(T);
+    Pcond = Ron_T*Im*Im/4.0f; //*2 for back2back with high inductance, current flows during both sinewaves
     #ifdef GCMX020A
     Eon = (0.01375f + 0.00158333f * g->Rg_on)*idc*v/600.0f/1000.0f;//    2; // *2 - just for test
     #endif
@@ -50,8 +70,8 @@ void GateDriveParams_init(GateDriveParams *g)
     g->Vth     = 3.6f;
     #endif
     #ifdef GCMX080A
-    g->Ron     = 0.0195f;
-    g->Rg_on   = (3.9f + 15.0f);
+    g->Ron     = 0.1f;
+    g->Rg_on   = (0.0f + 15.0f);
     g->Rg_off  = 3.9f;
     g->Ug_on   = 15.0f;
     g->Ug_off  = -5.0f;
@@ -138,14 +158,25 @@ void ThermalModelInit(ThermalModel *thm)
 
     //Thermal model holder - to be estimated from measurements
     #ifdef GCMX080A
-    thm->Rth1 = 0.51;
-    thm->Cth1 = 0.01f;
-    thm->Rth2 = 5.6f;
-    thm->Cth2 = 1.9f;
-    thm->Rth3 = 10.0f;
-    thm->Cth3 = 5.6f;
-    thm->Rth4 = 10.0f;
-    thm->Cth4 = 11.317f;
+    /*
+    thm->Rth1 = 0.22f;
+    thm->Cth1 = 0.0023f;
+    thm->Rth2 = 0.41f;
+    thm->Cth2 = 0.0123f;
+    thm->Rth3 = 0.63f;
+    thm->Cth3 = 0.0789f;
+    thm->Rth4 = 0.2f;
+    thm->Cth4 = 30.0f;
+    */
+    //Thermal model from AI regression analasis
+    thm->Rth1 = 0.35f;
+    thm->Cth1 = 0.0175f;
+    thm->Rth2 = 0.59f;
+    thm->Cth2 = 1.2f;
+    thm->Rth3 = 0.56f;
+    thm->Cth3 = 32.0f;
+    thm->Rth4 = 0.45f;
+    thm->Cth4 = 436.0f;
     #endif
 
 
@@ -168,9 +199,9 @@ void VirtualHeatsink_ThermalModelInit(ThermalModel *thm, float vhs_coeff)
     thm->Rth2 = thm->Rth2;
     thm->Cth2 = thm->Cth2*vhs_coeff;
     thm->Rth3 = thm->Rth3;
-    thm->Cth3 = thm->Cth3*vhs_coeff;
+    thm->Cth3 = thm->Cth3;
     thm->Rth4 = thm->Rth4;
-    thm->Cth4 = thm->Cth4*vhs_coeff;
+    thm->Cth4 = thm->Cth4;
 }
 
 void PI_Init(PI_Controller *pi,
@@ -261,7 +292,7 @@ float DeadTimeVoltageCompensation(unsigned int fsw_Hz, unsigned int deadtime, fl
     float fsw_kHz = (float)fsw_Hz / 1000.0f;   // Hz → kHz
     float deadtime_ns = (float)deadtime;       // already in ns
     float C = 0.000001; // Ns and kHz scale
-    float voltage_compensation = deadtime_ns * C * fsw_kHz * Udc;
+    float voltage_compensation = deadtime_ns * C * fsw_kHz * Udc * 2;
 
     return voltage_compensation;
 }

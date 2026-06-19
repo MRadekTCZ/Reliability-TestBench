@@ -38,31 +38,75 @@ void ABC_to_AlfaBeta(threephase *x, float inv_kpc)
 
 void CurrentObserver(threephase *Voltage, threephase *current_est, float Ts, float Res, float Ls_inv, float kpc)
 {
-    float kL;
-    float kR;
+float Ls_val;
+    float den;
+    float a;
+    float b;
     float v_alfa, v_beta;
+
+    /*
+       Previous voltage samples for trapezoidal integration.
+       Static = remembered between function calls.
+    */
+    static float v_alfa_prev = 0.0f;
+    static float v_beta_prev = 0.0f;
+    static int initialized = 0;
 
     /* Use same angle/frame as voltage */
     current_est->theta = Voltage->theta;
     current_est->omega = Voltage->omega;
 
-    /* Convert differential voltage dq -> alphabeta */
+    /* Convert voltage dq -> alphabeta */
     DQ_to_AlfaBeta(Voltage);
 
     v_alfa = Voltage->ab.alfa;
     v_beta = Voltage->ab.beta;
 
-    /* Discrete coefficients */
-    kL = Ts * Ls_inv;      /* Ts / L */
-    kR = Res * kL;         /* Ts * R / L */
+    /*
+       Reconstruct L from Ls_inv because function input cannot be changed.
+       Ls_inv = 1 / Ls
+    */
+    Ls_val = 1.0f / Ls_inv;
 
-    /* Incremental RL observer in alphabeta */
-    current_est->ab.alfa += kL * v_alfa - kR * current_est->ab.alfa;
-    current_est->ab.beta += kL * v_beta - kR * current_est->ab.beta;
+    /*
+       Tustin / trapezoidal discretization of:
 
-    /* Convert estimated current to abc */
+           L di/dt + R i = v
+
+       i[n] = a*i[n-1] + b*(v[n] + v[n-1])
+
+       a = (2L - R Ts) / (2L + R Ts)
+       b = Ts / (2L + R Ts)
+    */
+    den = 2.0f * Ls_val + Res * Ts;
+
+    a = (2.0f * Ls_val - Res * Ts) / den;
+    b = Ts / den;
+
+    /*
+       Avoid startup half-step error.
+       On first call, set previous voltage equal to present voltage.
+    */
+    if (!initialized)
+    {
+        v_alfa_prev = v_alfa;
+        v_beta_prev = v_beta;
+        initialized = 1;
+    }
+
+    current_est->ab.alfa = a * current_est->ab.alfa +
+                           b * (v_alfa + v_alfa_prev);
+
+    current_est->ab.beta = a * current_est->ab.beta +
+                           b * (v_beta + v_beta_prev);
+
+    v_alfa_prev = v_alfa;
+    v_beta_prev = v_beta;
+
+    /* Convert estimated current to abc and dq */
     AlfaBeta_to_ABC(current_est, kpc);
     AlfaBeta_to_DQ(current_est);
+
 }
 
 void DQ_RMS(threephase *current){

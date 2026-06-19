@@ -4,9 +4,9 @@
 #include "driverlib.h"
 #include "device.h"
 #include <stdint.h>
-#define PWM_FREQ_HZ     16000UL
+#define PWM_FREQ_HZ     20000UL
 #define SCALEkHz (1.0f/PWM_FREQ_HZ*1000.0f)
-#define DEADTIME_CYCLES 30UL /*  means x10 ns  */
+#define DEADTIME_CYCLES 50UL /*  means x10 ns  */
 #define DEADTIME_NS     (DEADTIME_CYCLES*10) 
 #define TBCLK_HZ        100000000UL
 #define SYSCLK_HZ       200000000UL

@@ -93,7 +93,8 @@ typedef struct {
 } PI_Controller;
 
 float LossCalc_precise(const GateDriveParams *g, float v, float Im, float fsw);
-float LossCalc_linear(const GateDriveParams *g, float V, float Im, float fsw);
+float LossCalc_linear(const GateDriveParams *g, float v, float Im, float fsw, float T);
+float RdsonTempMultiplier(float T);
 void GateDriveParams_init(GateDriveParams *g);
 float Tj_estimation(void);
 

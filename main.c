@@ -18,10 +18,10 @@
 #ifdef GCMX080A
 #define Ls 0.00043f
 #define Rs 0.06f
-#define CableR 0.7f
+#define CableR 0.07f
 #define OnebyLs 2325.581f
-float Rdson_base = 80.0f; //mOhm //+ measured offset (cables)
-float Rdson_real = 0.08f;
+float Rdson_base = 100.0f; //mOhm //+ measured offset (cables)
+float Rdson_real = 0.1f;
 #endif
 #ifdef GCMX020A
 #define Ls 0.001f
@@ -40,10 +40,10 @@ float kpc;
 #define BLUE_LED    31
 #define GREEN_LED    25
 #define RED_LED    34
-#define ACCELERATED_DRIVECYCLE 300000
+#define ACCELERATED_DRIVECYCLE 900000
 
-//uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
-uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger
+uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
+//uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger + Vth measurement
 #ifdef _FLASH
 uint8_t CAN_on = 1;
 #else
@@ -62,15 +62,15 @@ uint32_t timerCOM = 2000; // Hz of timer 0 - adjustable in debugger
 uint32_t timerALGO = 100;
 uint32_t timerCOM_cnt = 0;
 uint32_t timerALGO_cnt = 0;
-
+#define PWM_MARGIN 0.5f
 //ATC - PWM timer
 float Ts = 0.0001f;
 uint32_t fsw_ATC;
 float fsw_ATC_ratio = 1.0f;
 float fsw_force_set_kHz = 20.0f;
-float gate_strenght = 14.0; //[A] 5-30
+float gate_strenght = 1.0; //[A] 5-30
 uint16_t CFG8_write = 0x0;
-#define VIRTUAL_HEATSINK_COEFF 1.5f
+#define VIRTUAL_HEATSINK_COEFF 5.0f
 //ATC algo
 AgingParam Tj, Rdson, Uth;
 float Uth_base = 3.9f;
@@ -83,7 +83,7 @@ GateDriveParams gd_param_noATC, gd_param_ATC;
 float temp_offset = 0.0f; 
 float NTC_read_from_GD;
 float Tj_NTCbased;
-float Tj_est, Tj_ref, Tj_noATC, PowerT_est, PowerT_ref, PowerT_noATC, PowerT_NTCbased;
+float Tj_est = 0.0, Tj_ref = 0.0, Tj_noATC = 0.0, PowerT_est = 0.0, PowerT_ref = 0.0, PowerT_noATC = 0.0, PowerT_NTCbased = 0.0;
 float b2b_emul_scale;
 float NMOSFET  = 1.0f;
 float Tj_start, Tj_max_drivecycle, Tj_estimated_NTC_tracker, Tj_delta_max, Tj_avg_drivecycle, Tj_delta_drivecycle;
@@ -99,10 +99,10 @@ MA_State ma_omega, ma_Ud, ma_Uq;
 threephase Current_est, Current_meas, Current_b2b;
 threephase U_ref, U_set, U_force, U_back, U_delta, HDDT, HDDT_filtered;
 PWM spwm1, spwm2;
-float Udq_deadtime_comp;
+float Ud_deadtime_comp, Uq_deadtime_comp;
 //SET PROPER UDC VOLTAGE!
-float Udc_meas, Udc_emul = 300.0f, Udc_base = 300.0f;
-
+float Udc_meas = 150.0f, Udc_base = 200.0f;
+#define UDC_DRIVE_CYCLE 200.0f
 
 //CAN
 #define CAN_TX_OFFSET 10
@@ -145,13 +145,13 @@ void main(void)
     float ATC_Ts = 1.0f/timerALGO;
     ThermalModelInit(&th_model);
     ThermalModelInit(&th_virtual_heatsink);
-    // Base plate temperature directly from NTC
-    th_bare_bond_wire.Rth1 = 0.0867f;
-    th_bare_bond_wire.Cth1 = 0.00934f;
-    th_bare_bond_wire.Rth2 = 0.0607f;
-    th_bare_bond_wire.Cth2 = 0.0557f;
-    th_bare_bond_wire.Rth3 = 0.3616f;
-    th_bare_bond_wire.Cth3 = 0.1031f;
+    // Base plate temperature directly from NTC -GCMX080A
+    th_bare_bond_wire.Rth1 = 0.22f;
+    th_bare_bond_wire.Cth1 = 0.0023f;
+    th_bare_bond_wire.Rth2 = 0.41f;
+    th_bare_bond_wire.Cth2 = 0.0123f;
+    th_bare_bond_wire.Rth3 = 0.63f;
+    th_bare_bond_wire.Cth3 = 0.0789f;
     th_bare_bond_wire.Rth4 = 0.00001f;
     th_bare_bond_wire.Cth4 = 0.00001f;
 
@@ -163,11 +163,11 @@ void main(void)
 
     GateDriveParams_init(&gd_param_noATC);
     GateDriveParams_init(&gd_param_ATC);
-
-    b2b_emul_scale = 600.0f/10.0f/Udc;
+    //It was divided by 3 before
+    b2b_emul_scale = 600.0f/10.0f/UDC_DRIVE_CYCLE/5*Udc_meas/Udc_base;
     
     //              kP      kI      Ts      min        max      Init value
-    PI_Init(&atc_pi, 0.1f,   0.20f,   ATC_Ts,  0.375f,    1.625f,    1.0f ); 
+    PI_Init(&atc_pi, 0.01f,   0.10f,   ATC_Ts,  0.6f,    1.2f,    1.0f ); 
 
     // Device init (clock, PLL, watchdog config etc.)
     Device_init();
@@ -197,7 +197,7 @@ void main(void)
     for (addr = 1; addr <= 6; addr++){
         writeRegUCC5870(addr, CONTROL2, VGTH_MEAS);
     }
-    DEVICE_DELAY_US(10000);
+    DEVICE_DELAY_US(1000000);
     addr = 0;
     for(addr = 1; addr <=6; addr++){
         gd[addr-1].Uth = UCC5870_ADC_READ(readRegUCC5870(addr, ADCDATA8))*VGTH_SCALE;
@@ -268,7 +268,6 @@ __interrupt void epwm1_isr(void)
 {
     //Test only
     Current_meas = Current_est;//Test only
-    Udc_meas = Udc_base;
 
     //U ref (set from CAN)
     U_ref.theta = U_ref.theta + U_ref.omega*Ts;
@@ -285,7 +284,7 @@ __interrupt void epwm1_isr(void)
     DQ_to_AlfaBeta(&U_set);
     AlfaBeta_to_ABC(&U_set, kpc);
     DQ_RMS(&Current_est);
-
+    DQ_Im(&Current_est);
 
     //HDDT Voltage delta
     HDDT_filtered.theta = HDDT_filtered.theta + HDDT_filtered.omega*Ts;
@@ -323,13 +322,15 @@ __interrupt void epwm1_isr(void)
     {
     
         //Current Observer
-        CurrentObserver(&U_set, &Current_est, Ts, Rs+Rdson_real*2+CableR, OnebyLs, kpc);
-        Udq_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
-        if((U_set.dq.d < Udq_deadtime_comp) && (U_set.dq.q < Udq_deadtime_comp)) Udq_deadtime_comp = 0.0f;
+        CurrentObserver(&U_set, &Current_est, Ts, Rs+Rdson_real+CableR, OnebyLs, kpc);
+        Ud_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
+        Uq_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
+        if(U_set.dq.d < PWM_MARGIN) Ud_deadtime_comp = 0.0f;
+        if(U_set.dq.q < PWM_MARGIN) Uq_deadtime_comp = 0.0f;
         // Open loop Uref
-        SVPWM(U_set.dq.d+Udq_deadtime_comp, U_set.dq.q+Udq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
+        SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
         // Second PWM (Alternative)
-        SVPWM(U_set.dq.d+Udq_deadtime_comp, U_set.dq.q+Udq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
+        SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
 
         if(getStatus(config, MODULATION))
         {
@@ -380,6 +381,8 @@ __interrupt void epwm1_isr(void)
     else if(!getStatus(config, DRIVE_CYCLE_ON)) EPWM_DISABLE_FORCE_ALL();
 
     //Safety - NTC turn off
+    if(CAN_on)
+    {
     if(NTC_read_from_GD >= 155.0f)
     {
         spwm1.d1d4 = 0.0f;
@@ -388,6 +391,7 @@ __interrupt void epwm1_isr(void)
         spwm2.d1d4 = 0.0f;
         spwm2.d2d5 = 0.0f;
         spwm2.d3d6 = 0.0f;
+    }
     }
 
     //ATC PWM
@@ -442,7 +446,7 @@ __interrupt void cpu_timer0_isr(void)
         case 0:
         can_data_tx[0] = float3k_to_u64(Current_meas.ph.a, Current_meas.ph.b, Current_meas.ph.c, 100.0f); break;
         case 1:
-        can_data_tx[1] = float3k_to_u64(Current_meas.dq.d, Current_meas.dq.q, Current_meas.RMS,100.0f); break;
+        can_data_tx[1] = float3k_to_u64(Current_meas.dq.d, Current_meas.dq.q, Current_meas.Im,100.0f); break;
         case 2:
         can_data_tx[2] = float3k_to_u64(NTC_read_from_GD, Tj_NTCbased, Tj_est, 50.0f); break; //Real temperature
         case 3: 
@@ -450,7 +454,7 @@ __interrupt void cpu_timer0_isr(void)
         case 4: 
         can_data_tx[4] = float3k_to_u64(Tj_max_drivecycle, Tj_start, Tj_ref,50.0f); break;
         case 5:
-        can_data_tx[5] = float3k_to_u64(Current_est.dq.d, Current_est.dq.q, Current_est.RMS, 100.0f); break;
+        can_data_tx[5] = float3k_to_u64(Current_est.dq.d, Current_est.dq.q, Current_est.Im, 100.0f); break;
         case 6:
         can_data_tx[6] = float3k_to_u64(Rdson.up1, Rdson.up2, Rdson.up3, 10.0f); break;
         case 7:
@@ -546,7 +550,7 @@ __interrupt void cpu_timer1_isr(void)
         {   
             Tj_avg_drivecycle = Tj_avg_drivecycle + NTC_read_from_GD * DRIVE_CYCLE_PERIOD;
             if(NTC_read_from_GD > Tj_max_drivecycle) Tj_max_drivecycle = NTC_read_from_GD;
-            if ((drive_cycle_time_ms % 1000) == 0)
+            if ((drive_cycle_time_ms % 100) == 0)
             {
                 HDDT.omega = (float)DRIVE_CYCLE_omega_LUT[drive_cycle_time_ms/1000] * TWO_PI;
                 HDDT.dq.d = (float)DRIVE_CYCLE_Ud_LUT[drive_cycle_time_ms/1000] * b2b_emul_scale ;
@@ -554,6 +558,10 @@ __interrupt void cpu_timer1_isr(void)
                 HDDT_filtered.omega =  moving_average(HDDT.omega, &ma_omega);
                 HDDT_filtered.dq.d =  moving_average(HDDT.dq.d, &ma_Ud);
                 HDDT_filtered.dq.q =  moving_average(HDDT.dq.q, &ma_Uq);
+                //FIltering temporary removed - to have higher peaks
+                //HDDT_filtered.omega =  HDDT.omega;
+                //HDDT_filtered.dq.d =  HDDT.dq.d;
+                //HDDT_filtered.dq.q =  HDDT.dq.q;
             }
         }
        
@@ -572,17 +580,17 @@ __interrupt void cpu_timer1_isr(void)
     }
     //Temperature Estimation - reference case
     DQ_Im(&Current_est);
-    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_meas, Current_est.Im, PWM_FREQ_HZ) * NMOSFET;
+    PowerT_ref = LossCalc_linear(&gd_param_noATC, Udc_meas, Current_est.Im, PWM_FREQ_HZ, Tj_noATC) * NMOSFET;
     Tj_ref = Thermal_Step(&th_state_ref, PowerT_ref) + Tamb;
     //Temperature Estimation - ATC
-    PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_meas, Current_est.Im, gPWMHz) * NMOSFET;
+    PowerT_est = LossCalc_linear(&gd_param_ATC, Udc_meas, Current_est.Im, gPWMHz, Tj_est) * NMOSFET;
     Tj_est = Thermal_Step(&th_state_ATC, PowerT_est) + Tamb;
     //Temperature Estimation - comparison case
-    PowerT_noATC = LossCalc_linear(&gd_param_noATC, Udc_meas, Current_est.Im, PWM_FREQ_HZ) * NMOSFET;
+    PowerT_noATC = LossCalc_linear(&gd_param_noATC, Udc_meas, Current_est.Im, PWM_FREQ_HZ, Tj_noATC) * NMOSFET;
     Tj_noATC = Thermal_Step(&th_state_noATC, PowerT_noATC) + Tamb;
     
     //Temperature Estimation - Estimated better with help of NTC
-    PowerT_NTCbased = LossCalc_linear(&gd_param_ATC, Udc_meas, Current_est.Im, gPWMHz);
+    PowerT_NTCbased = LossCalc_linear(&gd_param_ATC, Udc_meas, Current_est.Im, gPWMHz, Tj_NTCbased);
     Tj_NTCbased = Thermal_Step(&th_state_real_NTC, PowerT_NTCbased) + NTC_read_from_GD;
 
     //PLACE TO IMPLEMENT ATC ALGORITHM - FINAL
