@@ -106,7 +106,7 @@ void main(void){
     U_ref.dq.d = 0.0f;
     U_ref.dq.q = 0.0f;
     U_ref.theta = 0.0f;
-    U_ref.omega = 0.0f;
+    U_ref.omega = 500.0f;
  
     //CAN DATA
     for(;;)
@@ -171,7 +171,7 @@ __interrupt void cpu_timer0_isr(void)
         case 0:
         u64_to_float3k(can_data_rx[0], &Current_meas.ph.a, &Current_meas.ph.b, &Current_meas.ph.c); break;
         case 1:
-        u64_to_float3k(can_data_rx[1], &Current_meas.dq.d, &Current_meas.dq.q, &Current_meas.RMS); break;
+        u64_to_float3k(can_data_rx[1], &Current_meas.dq.d, &Current_meas.dq.q, &Current_meas.Im); break;
         case 2:
         u64_to_float3k(can_data_rx[2], &T_NTC, &Tj_NTC_based, &Tj_est); break;
         case 3:

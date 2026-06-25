@@ -40,7 +40,7 @@ float kpc;
 #define BLUE_LED    31
 #define GREEN_LED    25
 #define RED_LED    34
-#define ACCELERATED_DRIVECYCLE 900000
+#define ACCELERATED_DRIVECYCLE 300000
 
 uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
 //uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger + Vth measurement
@@ -544,7 +544,7 @@ __interrupt void cpu_timer1_isr(void)
         if(drive_cycle_time_ms == 21000) Tj_start = NTC_read_from_GD;
         drive_cycle_time_ms = drive_cycle_time_ms + 10;
         #ifdef ACCELERATED_DRIVECYCLE
-        if(drive_cycle_time_ms == ACCELERATED_DRIVECYCLE) drive_cycle_time_ms = drive_cycle_time_ms + 1200000;
+        if(drive_cycle_time_ms == ACCELERATED_DRIVECYCLE) drive_cycle_time_ms = drive_cycle_time_ms + 1800000;
         #endif
         if(drive_cycle_time_ms < 2701000)
         {   
