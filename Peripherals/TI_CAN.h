@@ -30,7 +30,12 @@ typedef enum
 
 } Status;
 
-void CANB_MSG_INIT(uint8_t start_tx, uint8_t end_tx, uint8_t start_rx, uint8_t end_rx);
+void CANB_MSG_INIT(uint8_t tx_mailbox_offset,
+                   uint16_t tx_can_id_offset,
+                   uint8_t number_tx,
+                   uint8_t rx_mailbox_offset,
+                   uint16_t rx_can_id_offset,
+                   uint8_t number_rx);
 uint64_t CAN16x8_to_u64(uint16_t can[8]);
 void u64_to_CAN16x8(uint64_t value, uint16_t can[8]);
 uint64_t int16x4_to_u64(int16_t in[4]);

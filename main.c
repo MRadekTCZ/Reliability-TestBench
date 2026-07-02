@@ -105,9 +105,11 @@ float Udc_meas = 150.0f, Udc_base = 200.0f;
 #define UDC_DRIVE_CYCLE 200.0f
 
 //CAN
-#define CAN_TX_OFFSET 10
+#define CAN_ID_TX_OFFSET 10
+#define CAN_MSG_TX_OFFSET 10
 #define CAN_MSG_TX_AMOUNT 11
-#define CAN_RX_OFFSET 25
+#define CAN_ID_RX_OFFSET 25
+#define CAN_MSG_RX_OFFSET 25
 #define CAN_MSG_RX_AMOUNT 3
 uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
@@ -240,7 +242,7 @@ void main(void)
     CAN_setBitRate(CANB_BASE, DEVICE_SYSCLK_FREQ, 500000, 16);
     // Configure TX message object
     // TX message objects (enable TX interrupt if you want to track completion later)
-    CANB_MSG_INIT(CAN_TX_OFFSET,CAN_TX_OFFSET+CAN_MSG_TX_AMOUNT-1,CAN_RX_OFFSET,CAN_RX_OFFSET+CAN_MSG_RX_AMOUNT-1);
+    CANB_MSG_INIT(CAN_MSG_TX_OFFSET,CAN_ID_TX_OFFSET,CAN_MSG_TX_AMOUNT,CAN_MSG_RX_OFFSET,CAN_ID_RX_OFFSET,CAN_MSG_RX_AMOUNT);
     CAN_enableAutoBusOn(CANB_BASE);
     CAN_setAutoBusOnTime(CANB_BASE, 200000U);
     CAN_startModule(CANB_BASE);
@@ -469,10 +471,10 @@ __interrupt void cpu_timer0_isr(void)
     }
     // Send 
     u64_to_CAN16x8(can_data_tx[can_tx_msg_cnt], can_msg_tx[can_tx_msg_cnt]);
-    CAN_sendMessage(CANB_BASE, CAN_TX_OFFSET+can_tx_msg_cnt, 8, can_msg_tx[can_tx_msg_cnt]);
+    CAN_sendMessage(CANB_BASE, CAN_MSG_TX_OFFSET +can_tx_msg_cnt, 8, can_msg_tx[can_tx_msg_cnt]);
     DEVICE_DELAY_US(2);
     // Read
-    CAN_readMessage(CANB_BASE, CAN_RX_OFFSET+can_rx_msg_cnt, can_msg_rx[can_rx_msg_cnt]);
+    CAN_readMessage(CANB_BASE, CAN_MSG_RX_OFFSET +can_rx_msg_cnt, can_msg_rx[can_rx_msg_cnt]);
     can_data_rx[can_rx_msg_cnt] = CAN16x8_to_u64(can_msg_rx[can_rx_msg_cnt]);
 
     if(CAN_on)

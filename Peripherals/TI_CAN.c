@@ -3,20 +3,47 @@
 #include "TI_CAN.h"
 #include <stdint.h>
 #include <math.h>
-void CANB_MSG_INIT(uint8_t start_tx, uint8_t end_tx, uint8_t start_rx, uint8_t end_rx){
-    
-    uint8_t msg_indx = 0;
-    for(msg_indx = start_tx; msg_indx <= end_tx; msg_indx++){
-    CAN_setupMessageObject(CANB_BASE, msg_indx, msg_indx,
-                       CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                       CAN_MSG_OBJ_TX_INT_ENABLE, CAN_TX_DLC);
+void CANB_MSG_INIT(uint8_t tx_mailbox_offset,
+                   uint16_t tx_can_id_offset,
+                   uint8_t number_tx,
+                   uint8_t rx_mailbox_offset,
+                   uint16_t rx_can_id_offset,
+                   uint8_t number_rx)
+{
+    uint8_t i = 0;
+    uint8_t mailbox = 0;
+    uint16_t can_id = 0;
+
+    // TX message objects
+    for(i = 0; i < number_tx; i++)
+    {
+        mailbox = tx_mailbox_offset + i;
+        can_id  = tx_can_id_offset + i;
+
+        CAN_setupMessageObject(CANB_BASE,
+                               mailbox,              // C2000 message object / mailbox number
+                               can_id,               // CAN ID on the bus
+                               CAN_MSG_FRAME_STD,
+                               CAN_MSG_OBJ_TYPE_TX,
+                               0,
+                               CAN_MSG_OBJ_TX_INT_ENABLE,
+                               CAN_TX_DLC);
     }
-    msg_indx = 0;   
-    // RX message object (interrupt on reception)
-    for(msg_indx = start_rx; msg_indx <= end_rx; msg_indx++){
-    CAN_setupMessageObject(CANB_BASE, msg_indx, msg_indx,
-                       CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
-                       CAN_MSG_OBJ_NO_FLAGS, CAN_RX_DLC_DONTCARE);
+
+    // RX message objects
+    for(i = 0; i < number_rx; i++)
+    {
+        mailbox = rx_mailbox_offset + i;
+        can_id  = rx_can_id_offset + i;
+
+        CAN_setupMessageObject(CANB_BASE,
+                               mailbox,              // C2000 message object / mailbox number
+                               can_id,               // CAN ID on the bus
+                               CAN_MSG_FRAME_STD,
+                               CAN_MSG_OBJ_TYPE_RX,
+                               0,
+                               CAN_MSG_OBJ_NO_FLAGS,
+                               CAN_RX_DLC_DONTCARE);
     }
 }
 
