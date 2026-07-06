@@ -38,16 +38,18 @@ const float inv_park_coeff = 1.0f/(1.0f/one_by_sqrt2/sqrt3);
 float kpc;
 //GPIO
 #define BLUE_LED    31
-#define GREEN_LED    25
 #define RED_LED    34
+#define DRIVE_CYCLE_ATC_ENABLE 66
 #define ACCELERATED_DRIVECYCLE 300000
 
-uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
-//uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger + Vth measurement
+
 #ifdef _FLASH
 uint8_t CAN_on = 1;
+uint64_t config = 0x00085;
 #else
 uint8_t CAN_on = 0;
+uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
+//uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger + Vth measurement
 #endif
 
 //Clocks
@@ -111,6 +113,8 @@ float Udc_meas = 150.0f, Udc_base = 200.0f;
 #define CAN_ID_RX_OFFSET 25
 #define CAN_MSG_RX_OFFSET 25
 #define CAN_MSG_RX_AMOUNT 3
+#define ID2_DEVICE_OFFSET 0x100
+uint16_t can_id_device_offset = 0U;
 uint16_t can_msg_tx[CAN_MSG_TX_AMOUNT][8];
 uint64_t can_data_tx[CAN_MSG_TX_AMOUNT];
 uint16_t can_msg_rx[CAN_MSG_RX_AMOUNT][8];
@@ -177,14 +181,25 @@ void main(void)
     // GPIO init (unlocks pins, sets default states)
     Device_initGPIO();
 
-    // LED pin
+    // GPIO and LED
     GPIO_setPadConfig(BLUE_LED, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(BLUE_LED, GPIO_DIR_MODE_OUT);
-    GPIO_writePin(BLUE_LED, 0);
+    GPIO_writePin(BLUE_LED, 1);
     GPIO_setPadConfig(RED_LED, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(RED_LED, GPIO_DIR_MODE_OUT);
-    GPIO_writePin(RED_LED, 0);
+    GPIO_writePin(RED_LED, 1);
 
+    GPIO_setPadConfig(DRIVE_CYCLE_ATC_ENABLE, GPIO_PIN_TYPE_PULLUP);
+    GPIO_setDirectionMode(DRIVE_CYCLE_ATC_ENABLE, GPIO_DIR_MODE_IN);
+    DEVICE_DELAY_US(10000);
+    if(GPIO_readPin(DRIVE_CYCLE_ATC_ENABLE) == 0U)
+    {
+        can_id_device_offset = ID2_DEVICE_OFFSET;   // pin grounded during startup
+    }
+    else
+    {
+        can_id_device_offset = 0U;
+    }
     //SPI and Gate Driver UCC5870 init
     ERTM; // optional, enables real-time debug events
     configureSPI_GPIO();
@@ -242,7 +257,12 @@ void main(void)
     CAN_setBitRate(CANB_BASE, DEVICE_SYSCLK_FREQ, 500000, 16);
     // Configure TX message object
     // TX message objects (enable TX interrupt if you want to track completion later)
-    CANB_MSG_INIT(CAN_MSG_TX_OFFSET,CAN_ID_TX_OFFSET,CAN_MSG_TX_AMOUNT,CAN_MSG_RX_OFFSET,CAN_ID_RX_OFFSET,CAN_MSG_RX_AMOUNT);
+    CANB_MSG_INIT(CAN_MSG_TX_OFFSET,
+                    CAN_ID_TX_OFFSET + can_id_device_offset,
+                    CAN_MSG_TX_AMOUNT,
+                    CAN_MSG_RX_OFFSET,
+                    CAN_ID_RX_OFFSET + can_id_device_offset,
+                    CAN_MSG_RX_AMOUNT);
     CAN_enableAutoBusOn(CANB_BASE);
     CAN_setAutoBusOnTime(CANB_BASE, 200000U);
     CAN_startModule(CANB_BASE);
@@ -414,10 +434,7 @@ __interrupt void cpu_timer0_isr(void)
     timerCOM_cnt++;
     if(timerCOM_cnt == 500)
     {
-        
-        GPIO_writePin(RED_LED, 1);
-            uint16_t gd_addr = 0;
-            
+        uint16_t gd_addr = 0;           
         for(gd_addr = 1; gd_addr <=6; gd_addr++){
             //gd[gd_addr-1].AI[1] = UCC5870_ADC_READ(readRegUCC5870(gd_addr, ADCDATA1));
             //DEVICE_DELAY_US(10);
@@ -427,12 +444,10 @@ __interrupt void cpu_timer0_isr(void)
             DEVICE_DELAY_US(10);
             
         }
-    }
-    else if(timerCOM_cnt == 1000)
-    {
-        GPIO_writePin(RED_LED, 0);
         timerCOM_cnt = 0;
     }
+
+
 
     
 
@@ -482,7 +497,19 @@ __interrupt void cpu_timer0_isr(void)
     switch(can_rx_msg_cnt)
     {
         case 0:  
-            config = can_data_rx[0]; break;
+            if (can_data_rx[0]!= 0x0)  
+            {config = can_data_rx[0];
+            GPIO_writePin(RED_LED, (timerCOM_cnt / 100) % 2);
+            }
+            else {
+                #ifdef _FLASH
+                if(GPIO_readPin(DRIVE_CYCLE_ATC_ENABLE)) config = 0x000A5;
+                else config = 0x00085;
+                #else
+                config = 0x10005
+                #endif
+            }
+            break;
         case 1:
             u64_to_float3k(can_data_rx[1], &U_ref.dq.d, &U_ref.dq.q, &U_ref.omega); break;
         case 2:
@@ -527,15 +554,7 @@ __interrupt void cpu_timer1_isr(void)
     //NTC_read_from_GD = NTC_conversion(gd[5].AI[1], 15.0f - 0.5f);
     timerALGO_cnt++;
     // High importancy TIMER - ATC algo will be here
-    if(timerALGO_cnt == 70)
-    {
-        GPIO_writePin(BLUE_LED, 0);
-    }
-    else if(timerALGO_cnt == 150)
-    {
-        GPIO_writePin(BLUE_LED, 1);
-        timerALGO_cnt = 0;
-    }
+
 
     if(getStatus(config, DRIVE_CYCLE_ON))
     {
@@ -579,6 +598,8 @@ __interrupt void cpu_timer1_isr(void)
 
         }  
         else drive_cycle_time_ms = 0;
+
+        GPIO_writePin(BLUE_LED, (drive_cycle_time_ms / 1000) % 2);
     }
     //Temperature Estimation - reference case
     DQ_Im(&Current_est);
@@ -625,6 +646,7 @@ __interrupt void cpu_timer1_isr(void)
     else gPWMHz = PWM_FREQ_HZ;
     if(getStatus(config, ATC_ACTIVE))
     {     
+        GPIO_writePin(BLUE_LED, (drive_cycle_time_ms / 250) % 2);
         gPWMHz = (uint32_t)(PWM_FREQ_HZ*fsw_ATC_ratio);
     }
     if(gPWMHz >= 4000) Ts = 1.0f/gPWMHz;
