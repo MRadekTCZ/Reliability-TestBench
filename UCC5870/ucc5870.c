@@ -383,7 +383,7 @@ void Init_UCC5870_Regs(void)
     ucc5870[UH].cfg7.bit.ADC_SAMP_DLY       = ADC_SAMP_DELAY_1120ns;
     ucc5870[UH].cfg7.bit.ADC_SAMP_MODE      = ADC_SAMP_CENTER_ALIGN;
     ucc5870[UH].cfg7.bit.ADC_EN             = ADC_SAMP_ENABLE;
-    ucc5870[UH].cfg7.bit.OVLO3TH            = VEE2_OVLO_VTH_M10V;
+    ucc5870[UH].cfg7.bit.OVLO3TH            = VEE2_OVLO_VTH_M12V;
     ucc5870[UH].cfg7.bit.UVLO3TH            = VEE2_UVLO_VTH_M3V;
     ucc5870[UH].cfg7.bit.OVLO2TH            = VCC2_OVLO_VTH_P23V;
     ucc5870[UH].cfg7.bit.UVLO2TH            = VCC2_UVLO_VTH_P12V;
@@ -391,7 +391,7 @@ void Init_UCC5870_Regs(void)
     //
     // CFG8 register settings
     //
-    ucc5870[UH].cfg8.bit.IOUT_SEL         = GATE_DRIVE_STRENGTH_FULL;
+    ucc5870[UH].cfg8.bit.IOUT_SEL         = GATE_DRIVE_STRENGTH_6th;
     ucc5870[UH].cfg8.bit.AI_ASC_MUX       = AI_ASC_MUX_AI;
     ucc5870[UH].cfg8.bit.VREF_SEL         = VREF_INTERNAL;
     ucc5870[UH].cfg8.bit.GD_2LOFF_STO_EN  = GD_2LOFF_STO_ENABLE;
@@ -412,8 +412,8 @@ void Init_UCC5870_Regs(void)
     ucc5870[UH].cfg9.bit.INT_COMM_SEC_FAULT = dont_report_comm_fault_on_nFLT1;
     ucc5870[UH].cfg9.bit.GD_TSD_FAULT       = dont_report_fault_on_nFLT1;
     ucc5870[UH].cfg9.bit.PS_TSD_FAULT       = dont_report_TSD_on_nFLT1;
-    ucc5870[UH].cfg9.bit.OVLO23_FAULT       = dont_report_fault_on_nFLT1;
-    ucc5870[UH].cfg9.bit.UVLO23_FAULT       = dont_report_fault_on_nFLT1;
+    ucc5870[UH].cfg9.bit.OVLO23_FAULT       = report_fault_on_nFLT1;
+    ucc5870[UH].cfg9.bit.UVLO23_FAULT       = report_fault_on_nFLT1;
     ucc5870[UH].cfg9.bit.GM_FAULT           = GM_FAULT_IGNORE;  //GM_FAULT_IGNORE;  //
     ucc5870[UH].cfg9.bit.OC_FAULT           = dont_report_fault_on_nFLT1;
     ucc5870[UH].cfg9.bit.SC_FAULT           = dont_report_fault_on_nFLT1;

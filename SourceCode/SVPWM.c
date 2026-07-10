@@ -156,7 +156,7 @@ float Udq;
 float modulation_index;
 float Ua,Ub,Uc;
 
-Uvmax =  U_dc*one_by_sqrt3;
+Uvmax =  U_dc*0.5;
 Udq = sqrtf(Ud*Ud+Uq*Uq);
 if(Udq>=Uvmax)
 {

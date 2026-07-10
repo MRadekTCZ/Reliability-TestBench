@@ -40,7 +40,6 @@ float kpc;
 #define BLUE_LED    31
 #define RED_LED    34
 #define DRIVE_CYCLE_ATC_ENABLE 66
-#define ACCELERATED_DRIVECYCLE 300000
 
 
 #ifdef _FLASH
@@ -48,7 +47,7 @@ uint8_t CAN_on = 1;
 uint64_t config = 0x00085;
 #else
 uint8_t CAN_on = 0;
-uint64_t config = 0x10005; //open loop, control from debugger, freq and slope changable from dubugger
+uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger
 //uint64_t config = 0x10105; //open loop, control from debugger, freq and slope changable from dubugger + Vth measurement
 #endif
 
@@ -226,11 +225,12 @@ void main(void)
     Uth.down2 = gd[2].Uth;
     Uth.up3 = gd[5].Uth;
     Uth.down3 = gd[4].Uth;
+    GD_Init_LED_blink(20);
     }
     
     CFG8_check = readRegUCC5870(1, CFG8);
     DEVICE_DELAY_US(10);
-    GD_Init_LED_blink(7);
+    GD_Init_LED_blink(3);
 
     // CANB pins (your board define must match the board)
     GPIO_setPinConfig(DEVICE_GPIO_CFG_CANRXB);
@@ -347,12 +347,17 @@ __interrupt void epwm1_isr(void)
         CurrentObserver(&U_set, &Current_est, Ts, Rs+Rdson_real+CableR, OnebyLs, kpc);
         Ud_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
         Uq_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
+        Ud_deadtime_comp = 0.0f;
+        Ud_deadtime_comp = 0.0f;
         if(U_set.dq.d < PWM_MARGIN) Ud_deadtime_comp = 0.0f;
         if(U_set.dq.q < PWM_MARGIN) Uq_deadtime_comp = 0.0f;
         // Open loop Uref
-        SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
+        //9.07 - Changed to SPWM
+        //SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
+        SPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
         // Second PWM (Alternative)
-        SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
+        //SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
+        SPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
 
         if(getStatus(config, MODULATION))
         {
@@ -404,8 +409,9 @@ __interrupt void epwm1_isr(void)
 
     //Safety - NTC turn off
     if(CAN_on)
-    {
-    if(NTC_read_from_GD >= 155.0f)
+    {// For 0V Temperautre is ~300 so this does not stop code from executing
+    /*
+    if(NTC_read_from_GD >= 155.0f && NTC_read_from_GD <= 255.0f) 
     {
         spwm1.d1d4 = 0.0f;
         spwm1.d2d5 = 0.0f;
@@ -414,6 +420,7 @@ __interrupt void epwm1_isr(void)
         spwm2.d2d5 = 0.0f;
         spwm2.d3d6 = 0.0f;
     }
+    */
     }
 
     //ATC PWM
@@ -506,7 +513,7 @@ __interrupt void cpu_timer0_isr(void)
                 if(GPIO_readPin(DRIVE_CYCLE_ATC_ENABLE)) config = 0x000A5;
                 else config = 0x00085;
                 #else
-                config = 0x10005
+                config = 0x10005;
                 #endif
             }
             break;
@@ -565,9 +572,9 @@ __interrupt void cpu_timer1_isr(void)
         if(drive_cycle_time_ms == 21000) Tj_start = NTC_read_from_GD;
         drive_cycle_time_ms = drive_cycle_time_ms + 10;
         #ifdef ACCELERATED_DRIVECYCLE
-        if(drive_cycle_time_ms == ACCELERATED_DRIVECYCLE) drive_cycle_time_ms = drive_cycle_time_ms + 1800000;
+        if(drive_cycle_time_ms == ACCELERATED_DRIVECYCLE) drive_cycle_time_ms = drive_cycle_time_ms + HIGHSPEED_SKIP;
         #endif
-        if(drive_cycle_time_ms < 2701000)
+        if(drive_cycle_time_ms < DRIVE_CYCLE_LUT_END)
         {   
             Tj_avg_drivecycle = Tj_avg_drivecycle + NTC_read_from_GD * DRIVE_CYCLE_PERIOD;
             if(NTC_read_from_GD > Tj_max_drivecycle) Tj_max_drivecycle = NTC_read_from_GD;
@@ -586,14 +593,14 @@ __interrupt void cpu_timer1_isr(void)
             }
         }
        
-        else if(drive_cycle_time_ms < 3000000)
+        else if(drive_cycle_time_ms < DRIVE_CYCLE_END)
         //stop for 13 second for measurement procedures - Uth, Rdson
         {
             HDDT_filtered.omega =  0.0f;
             HDDT_filtered.dq.d =  0.0f;
             HDDT_filtered.dq.q =  0.0f;
             EPWM_FORCE_OFF_ALL();
-            if(drive_cycle_time_ms == 2710000) Tj_delta_drivecycle = Tj_max_drivecycle - Tj_start;
+            if(drive_cycle_time_ms == DRIVE_CYCLE_LUT_END) Tj_delta_drivecycle = Tj_max_drivecycle - Tj_start;
             // SPACE FOR AUTOMATED TEST
 
         }  
