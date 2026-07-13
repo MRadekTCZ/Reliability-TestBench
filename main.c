@@ -100,7 +100,8 @@ MA_State ma_omega, ma_Ud, ma_Uq;
 threephase Current_est, Current_meas, Current_b2b;
 threephase U_ref, U_set, U_force, U_back, U_delta, HDDT, HDDT_filtered;
 PWM spwm1, spwm2;
-float Ud_deadtime_comp, Uq_deadtime_comp;
+float Ud_deadtime_comp = 0.0f;
+float Uq_deadtime_comp = 0.0f;
 //SET PROPER UDC VOLTAGE!
 float Udc_meas = 150.0f, Udc_base = 200.0f;
 #define UDC_DRIVE_CYCLE 200.0f
@@ -345,19 +346,15 @@ __interrupt void epwm1_isr(void)
     
         //Current Observer
         CurrentObserver(&U_set, &Current_est, Ts, Rs+Rdson_real+CableR, OnebyLs, kpc);
-        Ud_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
-        Uq_deadtime_comp = DeadTimeVoltageCompensation(gPWMHz, DEADTIME_NS, Udc_meas);
-        Ud_deadtime_comp = 0.0f;
-        Ud_deadtime_comp = 0.0f;
         if(U_set.dq.d < PWM_MARGIN) Ud_deadtime_comp = 0.0f;
         if(U_set.dq.q < PWM_MARGIN) Uq_deadtime_comp = 0.0f;
         // Open loop Uref
         //9.07 - Changed to SPWM
         //SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
-        SPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm1);
+        SPWM(U_set.dq.d, U_set.dq.q, U_set.theta, Udc_meas, &spwm1);
         // Second PWM (Alternative)
         //SVPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
-        SPWM(U_set.dq.d+Ud_deadtime_comp, U_set.dq.q+Uq_deadtime_comp, U_set.theta, Udc_meas, &spwm2);
+        SPWM(U_set.dq.d, U_set.dq.q, U_set.theta, Udc_meas, &spwm2);
 
         if(getStatus(config, MODULATION))
         {
