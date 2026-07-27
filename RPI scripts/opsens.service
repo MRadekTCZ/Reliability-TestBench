@@ -1,0 +1,19 @@
+[Unit]
+Description=Optic Sensor UDP Logger
+After=network-online.target NetworkManager-wait-online.service
+Wants=network-online.target NetworkManager-wait-online.service
+
+[Service]
+Type=simple
+User=user10
+WorkingDirectory=/home/user10/ATCstudy/OpticSensorUDP/source
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do ip addr show eth0 | grep -q "192.168.10.1" && exit 0; sleep 2; done; exit 1'
+ExecStart=/usr/bin/python3 /home/user10/ATCstudy/OpticSensorUDP/source/OpSens.py
+Restart=always
+RestartSec=5
+TimeoutStartSec=150
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
